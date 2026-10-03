@@ -2,14 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
   Alert,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { Colors, Radii, Typography, Spacing } from './src/theme/tokens';
+import { Colors } from './src/theme/tokens';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import SignInScreen from './src/screens/SignInScreen';
 import PendingApprovalScreen from './src/screens/PendingApprovalScreen';
@@ -19,16 +16,31 @@ import HomeScreen from './src/screens/HomeScreen';
 import ProjectsScreen from './src/screens/ProjectsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CredentialsScreen from './src/screens/CredentialsScreen';
-import DownloadsScreen from './src/screens/DownloadsScreen';
+
 import BottomNav from './src/components/BottomNav';
 
 function MainNavigator() {
-  const { currentStudent, setApprovedStudent, checkStatusForStudent, signOut } = useAuth();
+  const { currentStudent, isLoading, setApprovedStudent, checkStatusForStudent, signOut } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('signin'); // default to signin to showcase auth
-  const [showScreenSwitcher, setShowScreenSwitcher] = useState(false);
   const [pendingStudent, setPendingStudent] = useState(null);
   const [rejectedStudent, setRejectedStudent] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Auto-redirect based on auth state changes (restored session, sign-out, etc.)
+  useEffect(() => {
+    if (isLoading) return; // Wait for AuthContext to finish initializing
+    const isApproved =
+      currentStudent &&
+      (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED');
+
+    if (isApproved && currentScreen === 'signin') {
+      // Student was restored from saved session → go straight to home
+      setCurrentScreen('home');
+    } else if (!currentStudent && !['signin', 'onboarding'].includes(currentScreen)) {
+      // Student was signed out → go to signin
+      setCurrentScreen('signin');
+    }
+  }, [currentStudent, isLoading]);
 
   useEffect(() => {
     const rollNo = currentStudent?.roll_no || currentStudent?.roll_number;
@@ -71,7 +83,7 @@ function MainNavigator() {
       currentStudent &&
       (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED');
 
-    const protectedScreens = ['home', 'projects', 'profile', 'credentials', 'downloads'];
+    const protectedScreens = ['home', 'projects', 'profile', 'credentials'];
 
     if (protectedScreens.includes(screenId)) {
       if (!isApproved) {
@@ -149,7 +161,7 @@ function MainNavigator() {
       case 'credentials':
         return <CredentialsScreen onNavigate={handleNavigate} />;
       case 'downloads':
-        return <DownloadsScreen onNavigate={handleNavigate} />;
+        return <CredentialsScreen onNavigate={handleNavigate} />;
       case 'home':
       default:
         return <HomeScreen onNavigate={handleNavigate} />;
@@ -160,67 +172,6 @@ function MainNavigator() {
     <SafeAreaView style={styles.safeArea}>
       <ExpoStatusBar style="dark" backgroundColor={Colors.surface} />
       <View style={styles.container}>
-        {/* Screen Switcher Banner (allows instant jumping between all screens for pairing/review) */}
-        <View style={styles.switcherHeader}>
-          <TouchableOpacity
-            style={styles.switcherToggle}
-            onPress={() => setShowScreenSwitcher(!showScreenSwitcher)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.liveDot} />
-            <Text style={styles.switcherToggleText}>
-              Active: <Text style={styles.currentScreenBold}>{currentScreen.toUpperCase()}</Text>
-              {currentStudent ? (
-                <Text style={styles.studentPill}> · {currentStudent.roll_no}</Text>
-              ) : (
-                <Text style={styles.unauthPill}> · Not Authenticated</Text>
-              )}
-            </Text>
-            <Text style={styles.switcherArrowText}>{showScreenSwitcher ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-
-          {showScreenSwitcher && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.switcherPillScroll}
-              style={styles.switcherDropdown}
-            >
-              {[
-                { id: 'signin', label: '1. Sign In / Register' },
-                { id: 'pending', label: '⏳ 2. Pending Approval Screen' },
-                { id: 'rejected', label: '🚫 3. Rejected Screen' },
-                { id: 'home', label: '4. Home Overview (Approved)' },
-                { id: 'projects', label: '5. My Projects' },
-                { id: 'profile', label: '6. Academic Profile' },
-                { id: 'credentials', label: '7. Credentials Vault' },
-                { id: 'downloads', label: '8. Downloads Cache' },
-                { id: 'onboarding', label: '0. Onboarding' },
-              ].map((s) => (
-                <TouchableOpacity
-                  key={s.id}
-                  style={[
-                    styles.switcherPill,
-                    currentScreen === s.id && styles.switcherPillActive,
-                  ]}
-                  onPress={() => {
-                    setShowScreenSwitcher(false);
-                    handleNavigate(s.id);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.switcherPillText,
-                      currentScreen === s.id && styles.switcherPillTextActive,
-                    ]}
-                  >
-                    {s.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </View>
 
         {/* Main Active Screen */}
         <View style={styles.screenWrapper}>
@@ -263,81 +214,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.canvas,
     position: 'relative',
   },
-  switcherHeader: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    zIndex: 100,
-  },
-  switcherToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.margin,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(239, 244, 255, 0.7)',
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.verifiedGreen,
-    marginRight: 6,
-  },
-  switcherToggleText: {
-    ...Typography.eyebrow,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    flex: 1,
-  },
-  currentScreenBold: {
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  studentPill: {
-    color: Colors.secondary,
-    fontWeight: '700',
-  },
-  unauthPill: {
-    color: Colors.pendingAmber,
-    fontWeight: '600',
-  },
-  switcherArrowText: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-  },
-  switcherDropdown: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 6,
-    paddingHorizontal: Spacing.margin,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  switcherPillScroll: {
-    gap: 6,
-  },
-  switcherPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.canvasAlt,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  switcherPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  switcherPillText: {
-    ...Typography.labelSm,
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  switcherPillTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
+
   screenWrapper: {
     flex: 1,
   },

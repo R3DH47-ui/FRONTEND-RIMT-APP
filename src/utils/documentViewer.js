@@ -22,6 +22,15 @@ export function isImageDocument(document) {
 export function getCleanFileName(document) {
   const base = document?.original_filename || document?.title || 'document';
   const ext = document?.format || '';
+  const existingExt = (base.split('.').pop() || '').toLowerCase();
+  const knownExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx', 'txt', 'gif', 'bmp'];
+
+  // If the base already has a recognized file extension, don't append another one
+  // (e.g., "Certificate.jpg" with format "pdf" should stay "Certificate.jpg", not "Certificate.jpg.pdf")
+  if (knownExts.includes(existingExt)) {
+    return base;
+  }
+
   if (ext && !base.toLowerCase().endsWith(`.${ext.toLowerCase()}`)) {
     return `${base}.${ext}`;
   }
@@ -32,7 +41,12 @@ export function getCleanFileName(document) {
  * Resolves the active access URI / URL of the document.
  */
 export function getDocumentUri(document) {
-  return document?.cloudinary_url || document?.uri || document?.url || '';
+  return document?.cloudinary_url
+    || document?.file_url
+    || document?.verification_url
+    || document?.uri
+    || document?.url
+    || '';
 }
 
 /**
@@ -40,7 +54,13 @@ export function getDocumentUri(document) {
  * Checks cloudinary_url first, then uri/url fields.
  */
 function getRemoteUrl(document) {
-  const candidates = [document?.cloudinary_url, document?.uri, document?.url];
+  const candidates = [
+    document?.cloudinary_url,
+    document?.file_url,
+    document?.verification_url,
+    document?.uri,
+    document?.url,
+  ];
   for (const c of candidates) {
     if (c && (c.startsWith('http://') || c.startsWith('https://'))) {
       return c;
@@ -79,8 +99,26 @@ async function prepareFileForSharing(sourceUri, fileName) {
   const targetUri = `${FileSystem.cacheDirectory}share_${Date.now()}_${sanitizedName}`;
 
   if (sourceUri.startsWith('http://') || sourceUri.startsWith('https://')) {
-    const downloadRes = await FileSystem.downloadAsync(sourceUri, targetUri);
+    let downloadRes;
+    try {
+      downloadRes = await FileSystem.downloadAsync(sourceUri, targetUri);
+    } catch (e) {
+      downloadRes = { status: 500 };
+    }
+
     if (downloadRes.status !== 200 && downloadRes.status !== 206) {
+      // Cloudinary PDF fallback: If direct PDF delivery returns 401/403 ACL error,
+      // Cloudinary delivers high-res converted JPEG automatically
+      if (sourceUri.includes('res.cloudinary.com') && /\.pdf($|\?)/i.test(sourceUri)) {
+        const jpgUrl = sourceUri.replace(/\.pdf($|\?)/i, '.jpg$1');
+        const jpgTargetUri = targetUri.replace(/\.pdf$/i, '.jpg');
+        try {
+          const fallbackRes = await FileSystem.downloadAsync(jpgUrl, jpgTargetUri);
+          if (fallbackRes.status === 200 || fallbackRes.status === 206) {
+            return jpgTargetUri;
+          }
+        } catch {}
+      }
       throw new Error(`Failed to download remote document (Status ${downloadRes.status})`);
     }
     return targetUri;
@@ -229,10 +267,13 @@ export async function viewOrOpenDocument(document) {
       mimeType.includes('word') ||
       mimeType.includes('officedocument');
 
-    // Strategy 1: For remote URLs (PDFs / web documents), open directly via Linking
-    // Skip direct browser open for DOCX/DOC files so Android opens the native Office/Docs viewer
     const remoteUrl = getRemoteUrl(document);
-    if (remoteUrl && !isWordDocument) {
+    const isCloudinaryPdf = remoteUrl && remoteUrl.includes('res.cloudinary.com') && /\.pdf($|\?)/i.test(remoteUrl);
+
+    // Strategy 1: For standard remote web documents, open directly via Linking.
+    // Cloudinary PDFs and Office docs are routed to Strategy 2 (local cache + ACTION_VIEW intent)
+    // so Android opens native PDF/Word viewers and automatically falls back if CDN ACL denies raw PDF.
+    if (remoteUrl && !isWordDocument && !isCloudinaryPdf) {
       console.log('[documentViewer] Opening remote URL directly:', remoteUrl);
       const canOpen = await Linking.canOpenURL(remoteUrl);
       if (canOpen) {
@@ -244,17 +285,31 @@ export async function viewOrOpenDocument(document) {
 
     // Strategy 2: Prepare a local cached copy and open with ACTION_VIEW intent.
     // This fires the Android "Open with" chooser where apps RECEIVE the file for VIEWING
-    // (e.g., Microsoft Word, Google Docs, Adobe Acrobat, Drive PDF Viewer).
+    // (e.g., Microsoft Word, Google Docs, Adobe Acrobat, Drive PDF Viewer, Photos).
     const shareableUri = await prepareFileForSharing(uri, fileName);
+
+    // Derive effective MIME type from the actual prepared file extension
+    // (e.g., if Cloudinary PDF fallback downloaded a .jpg, use image/jpeg so PDF reader is not mistakenly launched)
+    const fileExt = (shareableUri.split(/[?#]/)[0].split('.').pop() || '').toLowerCase();
+    const effectiveMimeType = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      doc: 'application/msword',
+      txt: 'text/plain',
+    }[fileExt] || mimeType || 'application/octet-stream';
 
     if (Platform.OS === 'android') {
       try {
         const contentUri = await getContentUri(shareableUri);
-        console.log('[documentViewer] Opening with ACTION_VIEW intent:', contentUri, mimeType);
+        console.log('[documentViewer] Opening with ACTION_VIEW intent:', contentUri, effectiveMimeType);
 
         await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
           data: contentUri,
-          type: mimeType,
+          type: effectiveMimeType,
           flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
         });
         return { success: true };
@@ -267,9 +322,9 @@ export async function viewOrOpenDocument(document) {
     const isSharingAvailable = await Sharing.isAvailableAsync();
     if (isSharingAvailable) {
       await Sharing.shareAsync(shareableUri, {
-        mimeType: mimeType,
+        mimeType: effectiveMimeType,
         dialogTitle: `Open ${document.title || fileName}`,
-        UTI: document.format === 'pdf' ? 'com.adobe.pdf' : undefined,
+        UTI: effectiveMimeType === 'application/pdf' ? 'com.adobe.pdf' : effectiveMimeType === 'image/jpeg' ? 'public.jpeg' : undefined,
       });
       return { success: true };
     }
@@ -376,4 +431,3 @@ export async function downloadDocumentToDevice(document) {
     return { success: false, error: error?.message };
   }
 }
-

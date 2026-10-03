@@ -332,11 +332,11 @@ export default function HomeScreen({ onNavigate }) {
               />
               <View style={{ width: Spacing.spaceSm }} />
               <ActionTile
-                icon="cloud-download"
+                icon="workspace-premium"
                 iconColor={Colors.secondary}
                 iconBgColor="rgba(62, 97, 134, 0.08)"
-                title="Downloads"
-                onPress={() => onNavigate?.('downloads')}
+                title="Certificates"
+                onPress={() => onNavigate?.('credentials')}
               />
             </View>
 
@@ -401,7 +401,7 @@ export default function HomeScreen({ onNavigate }) {
             </View>
             <TouchableOpacity
               style={styles.servicesHubLink}
-              onPress={() => onNavigate?.('downloads')}
+              onPress={() => onNavigate?.('credentials')}
             >
               <Text style={styles.servicesHubText}>Services Hub</Text>
               <MaterialIcons name="chevron-right" size={16} color={Colors.primary} />
@@ -412,13 +412,13 @@ export default function HomeScreen({ onNavigate }) {
             <DocumentCard
               key={document.id || document.cloudinary_public_id}
               {...toDocumentCardProps(document)}
-              onDownloadPress={() => onNavigate?.('downloads')}
+              onDownloadPress={() => onNavigate?.('credentials')}
               onPress={() => onNavigate?.('credentials')}
             />
           ))}
           {documents.length === 0 && (
             <Text style={styles.emptyDocumentsText}>
-              No documents uploaded yet. Upload your first document from Downloads.
+              No documents uploaded yet. Upload your first document from Certificates.
             </Text>
           )}
         </View>

@@ -34,6 +34,13 @@ export default function DocumentDetailModal({
 
   const uri = getDocumentUri(document);
   const isImage = isImageDocument(document);
+  const isCloudinaryPdf = Boolean(
+    uri &&
+    uri.includes('res.cloudinary.com') &&
+    (document.format === 'pdf' || (document.mime_type || '').includes('pdf') || /\.pdf($|\?)/i.test(uri))
+  );
+  const visualPreviewUri = isCloudinaryPdf ? uri.replace(/\.pdf($|\?)/i, '.jpg$1') : uri;
+  const canShowVisualPreview = (isImage || isCloudinaryPdf) && Boolean(visualPreviewUri);
   const isLocal = document.storage_provider === 'local';
   const icon = getDocumentIcon(document);
   const iconColor = document.format === 'pdf' ? '#A31321' : isImage ? '#0284C7' : '#3E6186';
@@ -115,10 +122,10 @@ export default function DocumentDetailModal({
 
           <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
             {/* Visual Preview */}
-            {isImage && uri ? (
+            {canShowVisualPreview ? (
               <View style={styles.imagePreviewWrapper}>
                 <Image
-                  source={{ uri }}
+                  source={{ uri: visualPreviewUri }}
                   style={styles.imagePreview}
                   resizeMode="contain"
                 />

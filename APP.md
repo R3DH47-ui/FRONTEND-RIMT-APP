@@ -48,6 +48,7 @@ c:\Users\r3dha\OneDrive\Desktop\APP-RIMIT\
 ├── index.js                      # Expo entry point (registerRootComponent)
 ├── eslint.config.js              # ESLint configuration
 ├── .env                          # Supabase URL + Anon Key
+├── .env.example                  # Expo Cloudinary public config template
 │
 ├── src/
 │   ├── context/
@@ -92,6 +93,18 @@ c:\Users\r3dha\OneDrive\Desktop\APP-RIMIT\
 │
 └── assets/                       # Static assets (icons, splash, etc.)
 ```
+
+### Shared uploads
+
+Project logos and certificates must use public cloud URLs so both the student
+app and admin portal can render them. Uploads use Cloudinary through the admin portal's `/api/cloudinary/sign`
+endpoint (or an unsigned preset);
+there is no local or Supabase Storage fallback. Supabase stores the document
+metadata only. Set `EXPO_PUBLIC_CLOUDINARY_SIGNING_URL` in the Expo build
+environment to the deployed admin portal's `/api/cloudinary/sign` endpoint,
+and set a real `CLOUDINARY_API_SECRET` only in the admin portal's server
+environment. Never put the Cloudinary API secret in an `EXPO_PUBLIC_*`
+variable.
 
 ---
 

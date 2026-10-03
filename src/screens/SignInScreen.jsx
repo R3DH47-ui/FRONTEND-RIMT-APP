@@ -264,54 +264,6 @@ export default function SignInScreen({
               />
             </View>
 
-            {/* Mode Switcher Tabs */}
-            <View style={styles.modeTabsWrapper}>
-              <TouchableOpacity
-                style={[
-                  styles.modeTab,
-                  authMode === 'signin' && styles.modeTabActive,
-                ]}
-                onPress={() => setAuthMode('signin')}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons
-                  name="login"
-                  size={16}
-                  color={authMode === 'signin' ? '#ffffff' : Colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.modeTabText,
-                    authMode === 'signin' && styles.modeTabTextActive,
-                  ]}
-                >
-                  Sign In (Roll No)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.modeTab,
-                  authMode === 'signup' && styles.modeTabActive,
-                ]}
-                onPress={() => setAuthMode('signup')}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons
-                  name="person-add"
-                  size={16}
-                  color={authMode === 'signup' ? '#ffffff' : Colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.modeTabText,
-                    authMode === 'signup' && styles.modeTabTextActive,
-                  ]}
-                >
-                  Sign Up (New)
-                </Text>
-              </TouchableOpacity>
-            </View>
 
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>
@@ -537,36 +489,6 @@ export default function SignInScreen({
               </View>
             )}
 
-            {/* Quick Demo Pill (Useful for rapid testing) */}
-            <View style={styles.demoPillsRow}>
-              <Text style={styles.demoLabel}>Quick test:</Text>
-              <TouchableOpacity
-                style={styles.demoPill}
-                onPress={() => {
-                  setRollNo('RIMT/22/BTCSE/0417');
-                  if (authMode === 'signup') {
-                    setName('Aarav Sharma');
-                    setDepartment('B.Tech CSE');
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.demoPillText}>RIMT/22/BTCSE/0417 (Aarav)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.demoPill}
-                onPress={() => {
-                  setRollNo('RIMT/23/BBA/0512');
-                  if (authMode === 'signup') {
-                    setName('Priya Kaur');
-                    setDepartment('BBA');
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.demoPillText}>RIMT/23/BBA/0512 (Priya)</Text>
-              </TouchableOpacity>
-            </View>
 
             {/* Action CTA Button */}
             <TouchableOpacity
@@ -834,42 +756,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  modeTabsWrapper: {
-    flexDirection: 'row',
-    backgroundColor: Colors.canvasAlt,
-    borderRadius: Radii.md,
-    padding: 4,
-    marginBottom: Spacing.spaceMd,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  modeTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: Radii.sm,
-  },
-  modeTabActive: {
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  modeTabText: {
-    ...Typography.labelSm,
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  modeTabTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
   cardHeader: {
     alignItems: 'center',
     marginBottom: Spacing.spaceMd,
@@ -940,32 +826,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 4,
     fontStyle: 'italic',
-  },
-  demoPillsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: Spacing.spaceMd,
-    marginTop: 2,
-  },
-  demoLabel: {
-    ...Typography.codeXs,
-    fontSize: 11,
-    color: Colors.neutralGray,
-  },
-  demoPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: 'rgba(163, 19, 33, 0.08)',
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: 'rgba(163, 19, 33, 0.2)',
-  },
-  demoPillText: {
-    ...Typography.codeXs,
-    fontSize: 10.5,
-    color: Colors.primary,
-    fontWeight: '600',
   },
   submitButtonWrapper: {
     height: 50,

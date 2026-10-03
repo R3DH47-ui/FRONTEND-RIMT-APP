@@ -176,15 +176,6 @@ export const signUpStudent = async ({
       };
     }
 
-    // Determine avatar URL from avatarAsset (base64 or direct uri)
-    let photoUrl = avatar_url || null;
-    if (avatarAsset) {
-      if (avatarAsset.base64) {
-        photoUrl = `data:${avatarAsset.mimeType || 'image/jpeg'};base64,${avatarAsset.base64}`;
-      } else if (avatarAsset.uri && (avatarAsset.uri.startsWith('data:') || avatarAsset.uri.startsWith('http'))) {
-        photoUrl = avatarAsset.uri;
-      }
-    }
 
     // 2. Insert into Supabase with status: PENDING
     // Only pass columns that exist in the Supabase students table:
@@ -197,8 +188,10 @@ export const signUpStudent = async ({
       semester: cleanBatch,
       status: 'PENDING',
     };
-    if (photoUrl) {
-      studentRecord.avatar_url = photoUrl;
+
+    // If we have a direct URL (not base64), include it in the initial insert
+    if (avatar_url && avatar_url.startsWith('http')) {
+      studentRecord.avatar_url = avatar_url;
     }
 
     let inserted = null;
@@ -237,6 +230,62 @@ export const signUpStudent = async ({
     }
 
     inserted = data;
+
+    // 3. Upload avatar to Supabase Storage (proper URL, not base64 in text column)
+    if (avatarAsset && inserted) {
+      try {
+        const fileName = avatarAsset.fileName || avatarAsset.uri?.split('/').pop() || 'avatar.jpg';
+        const extension = fileName.split('.').pop()?.toLowerCase() || 'jpg';
+        const safeRoll = normalizedRoll.replace(/[^A-Z0-9_-]/g, '_');
+        const storagePath = `${safeRoll}/avatar-${Date.now()}.${extension}`;
+        const contentType = avatarAsset.mimeType || 'image/jpeg';
+
+        let uploadBody = null;
+        if (avatarAsset.uri) {
+          uploadBody = await getFileArrayBuffer(avatarAsset.uri, avatarAsset);
+        } else if (avatarAsset.base64) {
+          // Convert base64 to Uint8Array for upload
+          const binaryString = atob(avatarAsset.base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          uploadBody = bytes.buffer;
+        }
+
+        if (uploadBody) {
+          const { error: uploadError } = await supabase.storage
+            .from('student-media')
+            .upload(storagePath, uploadBody, { contentType, upsert: false });
+
+          if (!uploadError) {
+            const publicUrl = supabase.storage
+              .from('student-media')
+              .getPublicUrl(storagePath).data.publicUrl;
+
+            if (publicUrl) {
+              // Update the student row with the proper storage URL
+              const { data: updatedStudent } = await supabase
+                .from('students')
+                .update({ avatar_url: publicUrl })
+                .ilike('roll_no', normalizedRoll)
+                .select('*')
+                .maybeSingle();
+
+              if (updatedStudent) {
+                inserted = updatedStudent;
+              } else {
+                inserted.avatar_url = publicUrl;
+              }
+            }
+          } else {
+            console.warn('Avatar upload failed during signup:', uploadError.message);
+          }
+        }
+      } catch (avatarErr) {
+        console.warn('Avatar upload error during signup (non-blocking):', avatarErr?.message);
+      }
+    }
 
     // Cache only a registration confirmed by Supabase.
     const localStudentsJson = await storage.getItem(STORAGE_LOCAL_STUDENTS);
@@ -285,6 +334,70 @@ export const signUpStudent = async ({
 /**
  * Update Student Course, Department & Batch
  */
+/**
+ * Fetch the latest student profile from Supabase in real-time.
+ * Falls back to local storage if Supabase is unreachable.
+ */
+export const fetchStudentProfile = async (rollNo) => {
+  const normalizedRoll = normalizeRollNo(rollNo);
+  if (!normalizedRoll) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .ilike('roll_no', normalizedRoll)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('fetchStudentProfile Supabase error:', error.message);
+      // Fall back to local cache
+      return await getActiveScholar();
+    }
+
+    if (data) {
+      // Parse JSONB skills if stored as string
+      if (typeof data.skills === 'string') {
+        try { data.skills = JSON.parse(data.skills); } catch { data.skills = []; }
+      }
+      if (typeof data.semester_scores === 'string') {
+        try { data.semester_scores = JSON.parse(data.semester_scores); } catch { data.semester_scores = []; }
+      }
+      if (typeof data.internships === 'string') {
+        try { data.internships = JSON.parse(data.internships); } catch { data.internships = []; }
+      }
+      // Unpack certificates and internships from admin_notes JSON
+      if (data.admin_notes && typeof data.admin_notes === 'string') {
+        try {
+          const parsedNotes = JSON.parse(data.admin_notes);
+          if (parsedNotes && typeof parsedNotes === 'object') {
+            if (Array.isArray(parsedNotes.certificates) && (!data.certificates || !data.certificates.length)) {
+              data.certificates = parsedNotes.certificates;
+            }
+            if (Array.isArray(parsedNotes.internships) && (!data.internships || !data.internships.length)) {
+              data.internships = parsedNotes.internships;
+            }
+          }
+        } catch {}
+      }
+      // Update local cache with fresh data
+      await storage.setItem(STORAGE_ACTIVE_SCHOLAR, JSON.stringify(data));
+      return data;
+    }
+
+    return await getActiveScholar();
+  } catch (err) {
+    console.warn('fetchStudentProfile network error:', err.message);
+    return await getActiveScholar();
+  }
+};
+
+/**
+ * Update Student Profile — handles all profile fields including
+ * bio, about_me, skills, headline, projects, certificates, internships, and image uploads.
+ * Academic fields (cgpa, semester_scores, etc.) are admin-only
+ * and intentionally excluded from this function.
+ */
 export const updateStudentProfile = async ({
   rollNo,
   name,
@@ -293,12 +406,12 @@ export const updateStudentProfile = async ({
   department,
   batch,
   bio,
+  about_me,
   headline,
   skills,
-  linkedin_url,
-  github_url,
-  portfolio_url,
-  resume_url,
+  projects,
+  certificates,
+  internships,
   avatarAsset,
   bannerAsset,
 }) => {
@@ -316,6 +429,45 @@ export const updateStudentProfile = async ({
     if (course !== undefined) updatePayload.course = course || null;
     if (batch !== undefined) updatePayload.batch = batch || null;
     if (bio !== undefined) updatePayload.bio = bio.trim() || null;
+    if (about_me !== undefined) updatePayload.about_me = about_me.trim() || null;
+    if (headline !== undefined) updatePayload.headline = headline.trim() || null;
+    if (skills !== undefined) {
+      // Skills stored as JSONB array in Supabase
+      updatePayload.skills = Array.isArray(skills) ? skills : [];
+    }
+    if (projects !== undefined) {
+      // Projects stored as JSONB array in Supabase
+      updatePayload.projects = Array.isArray(projects) ? projects : [];
+    }
+
+    // Cloud-sync certificates and internships via students.admin_notes JSON
+    if (certificates !== undefined || internships !== undefined) {
+      let notesObj = {};
+      try {
+        const { data: curStudent } = await supabase
+          .from('students')
+          .select('admin_notes, resume_url')
+          .ilike('roll_no', normalizedRoll)
+          .maybeSingle();
+
+        if (curStudent?.admin_notes) {
+          try { notesObj = JSON.parse(curStudent.admin_notes); } catch {}
+        }
+        if (!curStudent?.resume_url && Array.isArray(certificates) && certificates.length > 0) {
+          const firstUrl = certificates[0].url || certificates[0].cloudinary_url;
+          if (firstUrl) updatePayload.resume_url = firstUrl;
+        }
+      } catch {}
+
+      if (!notesObj || typeof notesObj !== 'object') notesObj = {};
+      if (certificates !== undefined) {
+        notesObj.certificates = Array.isArray(certificates) ? certificates : [];
+      }
+      if (internships !== undefined) {
+        notesObj.internships = Array.isArray(internships) ? internships : [];
+      }
+      updatePayload.admin_notes = JSON.stringify(notesObj);
+    }
 
     const uploadImage = async (asset, type) => {
       if (!asset) return null;
@@ -367,42 +519,19 @@ export const updateStudentProfile = async ({
     const missingFields = new Set();
     while (cloudError?.code === '42703' || cloudError?.code === 'PGRST204') {
       const errorMessage = cloudError.message?.toLowerCase() || '';
-      const match = errorMessage.match(/could not find the '([^']+)' column/i);
-      const badCol = match ? match[1].toLowerCase() : null;
-
-      const unsupportedFields = [
-        'bio',
-        'headline',
-        'skills',
-        'course',
-        'department',
-        'batch',
-        'phone',
-        'avatar_url',
-        'banner_url',
-        'linkedin_url',
-        'github_url',
-        'portfolio_url',
-        'resume_url',
-      ].filter(
-        (field) =>
-          (field === badCol || errorMessage.includes(field)) &&
-          Object.prototype.hasOwnProperty.call(updatePayload, field)
-      );
-
-      if (!unsupportedFields.length) {
-        if (badCol && Object.prototype.hasOwnProperty.call(updatePayload, badCol)) {
-          unsupportedFields.push(badCol);
-        } else {
-          break;
-        }
-      }
+      const retryableFields = [
+        'course', 'department', 'batch', 'phone', 'avatar_url', 'banner_url',
+        'bio', 'about_me', 'headline', 'skills', 'projects',
+      ];
+      const unsupportedFields = retryableFields
+        .filter((field) => errorMessage.includes(field)
+          && Object.prototype.hasOwnProperty.call(updatePayload, field));
+      if (!unsupportedFields.length) break;
 
       unsupportedFields.forEach((field) => {
         delete updatePayload[field];
         missingFields.add(field);
       });
-
       cloudResult = await supabase
         .from('students')
         .update(updatePayload)
@@ -412,30 +541,9 @@ export const updateStudentProfile = async ({
       cloudStudent = cloudResult.data;
       cloudError = cloudResult.error;
     }
-
-    // If cloudStudent wasn't retrieved by the update, fetch it by roll_no
-    if (!cloudStudent?.id) {
-      const { data: existing } = await supabase
-        .from('students')
-        .select('*')
-        .ilike('roll_no', normalizedRoll)
-        .maybeSingle();
-      if (existing) cloudStudent = existing;
-    }
-
-    const dossierSyncedFields = new Set([
-      'bio',
-      'headline',
-      'skills',
-      'linkedin_url',
-      'github_url',
-      'portfolio_url',
-      'resume_url',
-    ]);
-    const criticalMissing = Array.from(missingFields).filter((f) => !dossierSyncedFields.has(f));
-    if (criticalMissing.length > 0) {
+    if (missingFields.size) {
       warnings.push(
-        `Supabase students table is missing ${criticalMissing.join(', ')}.`
+        `Supabase is missing ${Array.from(missingFields).join(', ')}. Run the migration SQL; values are saved locally until applied.`
       );
     }
 
@@ -445,49 +553,19 @@ export const updateStudentProfile = async ({
       warnings.push('The students table is not available in Supabase; changes were kept on this device.');
     }
 
-    // Upsert into student_profiles table (Bio, Headline, Skills, Social Links, Resume)
-    let profileData = null;
-    if (cloudStudent?.id) {
-      const studentId = cloudStudent.id;
-      const profileRecord = {
-        student_id: studentId,
-        updated_at: new Date().toISOString(),
-      };
-      if (bio !== undefined) profileRecord.bio = bio ? bio.trim() : null;
-      if (headline !== undefined) profileRecord.headline = headline ? headline.trim() : null;
-      if (skills !== undefined) profileRecord.skills = Array.isArray(skills) ? skills : (skills ? String(skills).split(',').map((s) => s.trim()).filter(Boolean) : []);
-      if (linkedin_url !== undefined) profileRecord.linkedin_url = linkedin_url ? linkedin_url.trim() : null;
-      if (github_url !== undefined) profileRecord.github_url = github_url ? github_url.trim() : null;
-      if (portfolio_url !== undefined) profileRecord.portfolio_url = portfolio_url ? portfolio_url.trim() : null;
-      if (resume_url !== undefined) profileRecord.resume_url = resume_url ? resume_url.trim() : null;
-
-      try {
-        const { data: profRes } = await supabase
-          .from('student_profiles')
-          .upsert(profileRecord, { onConflict: 'student_id' })
-          .select()
-          .maybeSingle();
-        profileData = profRes || profileRecord;
-      } catch (profErr) {
-        console.warn('Upsert student_profiles error:', profErr.message);
+    // Parse JSONB fields from cloud response
+    if (cloudStudent) {
+      if (typeof cloudStudent.skills === 'string') {
+        try { cloudStudent.skills = JSON.parse(cloudStudent.skills); } catch { cloudStudent.skills = []; }
       }
-
-      // Record audit log for Admin Realtime visibility
-      try {
-        await supabase
-          .from('admin_audit_log')
-          .insert([{
-            target_student_id: studentId,
-            table_name: 'student_profiles',
-            record_id: studentId,
-            action: 'student_profile_update',
-            old_data: null,
-            new_data: profileRecord,
-            created_at: new Date().toISOString(),
-          }]);
-      } catch {
-        // silent fallback
+      if (typeof cloudStudent.projects === 'string') {
+        try { cloudStudent.projects = JSON.parse(cloudStudent.projects); } catch { cloudStudent.projects = []; }
       }
+      if (typeof cloudStudent.semester_scores === 'string') {
+        try { cloudStudent.semester_scores = JSON.parse(cloudStudent.semester_scores); } catch { cloudStudent.semester_scores = []; }
+      }
+      if (certificates !== undefined) cloudStudent.certificates = certificates;
+      if (internships !== undefined) cloudStudent.internships = internships;
     }
 
     // Keep a local copy so older cloud rows can recover fields saved by the app.
@@ -495,15 +573,10 @@ export const updateStudentProfile = async ({
     const updatedScholar = {
       ...(active || {}),
       ...(cloudStudent || {}),
-      profile: profileData || active?.profile || null,
-      headline: headline !== undefined ? headline : (active?.headline || null),
-      skills: skills !== undefined ? skills : (active?.skills || []),
-      linkedin_url: linkedin_url !== undefined ? linkedin_url : (active?.linkedin_url || null),
-      github_url: github_url !== undefined ? github_url : (active?.github_url || null),
-      portfolio_url: portfolio_url !== undefined ? portfolio_url : (active?.portfolio_url || null),
-      resume_url: resume_url !== undefined ? resume_url : (active?.resume_url || null),
       roll_no: normalizedRoll,
       ...requestedPayload,
+      ...(certificates !== undefined ? { certificates } : {}),
+      ...(internships !== undefined ? { internships } : {}),
     };
     await storage.setItem(STORAGE_ACTIVE_SCHOLAR, JSON.stringify(updatedScholar));
 
@@ -526,55 +599,6 @@ export const updateStudentProfile = async ({
   } catch (err) {
     console.error('Error updating student profile:', err);
     return { success: false, error: err.message };
-  }
-};
-
-/**
- * Fetch comprehensive student data including dossier profile and academic records
- */
-export const getFullStudentData = async (student) => {
-  if (!student) return null;
-  const studentId = student.id;
-  if (!studentId) return student;
-
-  try {
-    const [profileRes, acadRes, projectsRes, gitRes, certsRes, internshipsRes] = await Promise.all([
-      supabase.from('student_profiles').select('*').eq('student_id', studentId).maybeSingle(),
-      supabase.from('student_academic_summary').select('*').eq('student_id', studentId).maybeSingle(),
-      supabase.from('student_projects').select('*').eq('student_id', studentId).eq('is_visible', true).order('sort_order', { ascending: true }),
-      supabase.from('student_git_projects').select('*').eq('student_id', studentId).eq('is_visible', true).order('sort_order', { ascending: true }),
-      supabase.from('student_certificates').select('*').eq('student_id', studentId).eq('is_visible', true).order('sort_order', { ascending: true }),
-      supabase.from('student_internships').select('*').eq('student_id', studentId).order('created_at', { ascending: false }),
-    ]);
-
-    const profile = profileRes.data || {};
-    const acad = acadRes.data || {};
-    const projects = projectsRes.data || [];
-    const git_projects = gitRes.data || [];
-    const certificates = certsRes.data || [];
-    const internships = internshipsRes.data || [];
-
-    return {
-      ...student,
-      profile,
-      headline: profile.headline || student.headline || null,
-      bio: profile.bio || student.bio || null,
-      skills: profile.skills || student.skills || [],
-      linkedin_url: profile.linkedin_url || student.linkedin_url || null,
-      github_url: profile.github_url || student.github_url || null,
-      portfolio_url: profile.portfolio_url || student.portfolio_url || null,
-      resume_url: profile.resume_url || student.resume_url || null,
-      projects,
-      git_projects,
-      certificates,
-      internships,
-      academic_summary: acad,
-      cgpa: acad.cgpa != null ? acad.cgpa : student.cgpa,
-      overall_attendance: acad.overall_attendance != null ? acad.overall_attendance : student.overall_attendance,
-      backlogs: acad.backlogs != null ? acad.backlogs : student.backlogs,
-    };
-  } catch {
-    return student;
   }
 };
 
@@ -640,8 +664,7 @@ export const signInStudent = async ({ rollNo }) => {
     }
 
     if (isApproved) {
-      const fullStudent = await getFullStudentData(student);
-      const activeStudent = { ...student, ...fullStudent, status: 'APPROVED' };
+      const activeStudent = { ...student, status: 'APPROVED' };
       await storage.setItem(STORAGE_ACTIVE_SCHOLAR, JSON.stringify(activeStudent));
 
       return {
@@ -694,8 +717,7 @@ export const checkStudentApprovalStatus = async ({ rollNo }) => {
 
     if (currentStatus === 'APPROVED') {
       // User was approved! Save session so they can enter immediately
-      const fullStudent = await getFullStudentData(student);
-      const activeStudent = { ...student, ...fullStudent, status: 'APPROVED' };
+      const activeStudent = { ...student, status: 'APPROVED' };
       await storage.setItem(STORAGE_ACTIVE_SCHOLAR, JSON.stringify(activeStudent));
       return {
         status: 'APPROVED',

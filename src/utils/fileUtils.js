@@ -119,6 +119,8 @@ export function base64ToArrayBuffer(base64 = '') {
  */
 export async function ensureLocalAccessibleUri(uri, fileName = 'file.bin') {
   if (Platform.OS === 'web' || !uri) return uri;
+  if (FileSystem.documentDirectory && uri.startsWith(FileSystem.documentDirectory)) return uri;
+  if (FileSystem.cacheDirectory && uri.startsWith(FileSystem.cacheDirectory)) return uri;
   return await persistFileToPermanentStorage(uri, fileName);
 }
 
@@ -137,50 +139,36 @@ export async function persistFileToPermanentStorage(uri, fileName = 'file.bin') 
     }
     const target = `${targetDir}${Date.now()}_${sanitizedName}`;
 
-    // 1. Try standard FileSystem.copyAsync
+    // 1. Copy through the native file API. Android content:// picker URIs can
+    // use their temporary read grant to move into app-owned storage.
     try {
       await FileSystem.copyAsync({ from: uri, to: target });
       return target;
     } catch (copyError) {
-      console.warn('[fileUtils] copyAsync rejected, using direct fetch fallback:', copyError?.message || copyError);
+      console.warn('[fileUtils] copyAsync notice, trying a base64 file read:', copyError?.message || copyError);
     }
 
-    // 2. Fallback: Read binary through native fetch (bypasses Expo Go path scoping)
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const res = reader.result;
-        if (typeof res === 'string') {
-          const commaIdx = res.indexOf(',');
-          resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
-        } else {
-          reject(new Error('Failed to read file blob as base64'));
-        }
-      };
-      reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-      reader.readAsDataURL(blob);
-    });
-
-    if (base64) {
+    // Reading through FileSystem avoids React Native Blob's base64 bridge.
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      if (!base64) throw new Error('The selected file was empty or unreadable.');
       await FileSystem.writeAsStringAsync(target, base64, {
         encoding: FileSystem.EncodingType.Base64,
       });
       return target;
+    } catch (readError) {
+      throw new Error(`Could not access the selected file: ${readError?.message || readError}`);
     }
-
-    return uri;
   } catch (error) {
-    console.warn('[fileUtils] Notice persisting file to permanent storage:', error?.message || error);
-    return uri;
+    throw new Error(`Could not prepare the selected file for upload: ${error?.message || error}`);
   }
 }
 
 /**
  * Reads file binary data across Web and Native (Android/iOS) safely.
- * Solves the "Call to function 'FileSystemFile.bytes' has been rejected (Missing READ permission)"
- * bug by using battle-tested FileSystem.readAsStringAsync and in-memory ArrayBuffer decoding.
+ * Picker cache URIs are read in place rather than copied a second time.
  */
 export async function getFileArrayBuffer(uri, asset) {
   if (Platform.OS === 'web') {
@@ -199,9 +187,12 @@ export async function getFileArrayBuffer(uri, asset) {
     });
     return base64ToArrayBuffer(base64);
   } catch (error) {
-    // If readAsStringAsync fails on original URI, try fetch arrayBuffer fallback
+    // Fetch directly as binary; converting through Blob adds an unnecessary base64 round trip.
     try {
       const response = await fetch(localUri);
+      if (!response.ok) {
+        throw new Error(`Could not read selected file (HTTP ${response.status}).`);
+      }
       return await response.arrayBuffer();
     } catch {
       throw error;
