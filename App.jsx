@@ -16,6 +16,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ProjectsScreen from './src/screens/ProjectsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CredentialsScreen from './src/screens/CredentialsScreen';
+import PlacementScreen from './src/screens/PlacementScreen';
 
 import BottomNav from './src/components/BottomNav';
 
@@ -83,7 +84,7 @@ function MainNavigator() {
       currentStudent &&
       (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED');
 
-    const protectedScreens = ['home', 'projects', 'profile', 'credentials'];
+    const protectedScreens = ['home', 'placement', 'projects', 'profile', 'credentials'];
 
     if (protectedScreens.includes(screenId)) {
       if (!isApproved) {
@@ -149,6 +150,8 @@ function MainNavigator() {
             onNavigate={handleNavigate}
           />
         );
+      case 'placement':
+        return <PlacementScreen onNavigate={handleNavigate} />;
       case 'projects':
         return <ProjectsScreen onNavigate={handleNavigate} />;
       case 'profile':
@@ -182,7 +185,7 @@ function MainNavigator() {
         {Boolean(
           currentStudent &&
           (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED') &&
-          ['home', 'credentials', 'projects', 'downloads', 'profile'].includes(currentScreen)
+          ['home', 'placement', 'credentials', 'projects', 'downloads', 'profile'].includes(currentScreen)
         ) && (
           <BottomNav
             activeTab={currentScreen}

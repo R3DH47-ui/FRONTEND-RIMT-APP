@@ -6,6 +6,7 @@ import ZoomCard from './ZoomCard';
 
 export const TABS = [
   { id: 'home', label: 'Home', icon: 'dashboard' },
+  { id: 'placement', label: 'Placement', icon: 'stars' },
   { id: 'projects', label: 'Projects', icon: 'folder-special' },
   { id: 'credentials', label: 'Certificates', icon: 'workspace-premium' },
   { id: 'profile', label: 'Profile', icon: 'badge' },

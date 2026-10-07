@@ -367,7 +367,7 @@ export default function HomeScreen({ onNavigate }) {
                 iconBgColor="rgba(46, 125, 79, 0.1)"
                 title="Placement"
                 subtitle="Session '25–26"
-                onPress={() => Alert.alert('Placement', 'Campus placement drive schedule and opportunities.')}
+                onPress={() => onNavigate?.('placement')}
               />
               <View style={{ width: Spacing.spaceSm }} />
               <ActionTile
