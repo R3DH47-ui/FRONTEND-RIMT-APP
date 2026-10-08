@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -20,12 +21,111 @@ import ShineEffect from '../components/ShineEffect';
 import ZoomCard from '../components/ZoomCard';
 import { useAuth } from '../context/AuthContext';
 import { listStudentDocuments, toDocumentCardProps } from '../services/documentService';
+import { supabase } from '../services/supabase';
 
 export default function HomeScreen({ onNavigate }) {
-  const { currentStudent } = useAuth();
+  const { currentStudent, refreshProfile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [activityCleared, setActivityCleared] = useState(false);
   const [documents, setDocuments] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Student Projects Count from Live Database
+  const [projectCount, setProjectCount] = useState(() => {
+    const raw = currentStudent?.projects;
+    if (Array.isArray(raw) && raw.length > 0) return raw.length;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed.length;
+      } catch {}
+    }
+    return 1;
+  });
+
+  // Calculate live project count from current student and Supabase
+  useEffect(() => {
+    let isMounted = true;
+    const updateCount = async () => {
+      const raw = currentStudent?.projects;
+      let count = 0;
+      if (Array.isArray(raw)) {
+        count = raw.length;
+      } else if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) count = parsed.length;
+        } catch {}
+      }
+
+      if (currentStudent?.id) {
+        try {
+          const { count: dbCount, error } = await supabase
+            .from('student_projects')
+            .select('id', { count: 'exact', head: true })
+            .eq('student_id', currentStudent.id);
+          if (!error && typeof dbCount === 'number' && dbCount > count) {
+            count = dbCount;
+          }
+        } catch {}
+      }
+
+      if (isMounted) {
+        setProjectCount(count > 0 ? count : 1);
+      }
+    };
+
+    updateCount();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentStudent?.id, currentStudent?.projects]);
+
+  // Dynamic Semester Calculation (Defaults to 1st Semester, or parses student's active term)
+  const getSemesterDisplay = () => {
+    const rawSem = currentStudent?.current_semester || currentStudent?.semester;
+    if (rawSem) {
+      if (typeof rawSem === 'number') {
+        const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+        return ordinals[rawSem - 1] || `${rawSem}th`;
+      }
+      const str = String(rawSem).trim();
+      const match = str.match(/(\d+)(?:st|nd|rd|th)?/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+        return ordinals[num - 1] || `${num}th`;
+      }
+      return str;
+    }
+    if (currentStudent?.batch) {
+      const match = String(currentStudent.batch).match(/(\d+)(?:st|nd|rd|th)?\s*sem/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+        return ordinals[num - 1] || `${num}th`;
+      }
+    }
+    return '1st';
+  };
+
+  // Real-Time Database CGPA
+  const getCgpaDisplay = () => {
+    if (currentStudent?.cgpa != null && currentStudent?.cgpa !== '') {
+      const num = Number(currentStudent.cgpa);
+      if (!isNaN(num)) {
+        return num % 1 === 0 ? num.toFixed(1) : num.toFixed(2);
+      }
+      return String(currentStudent.cgpa);
+    }
+    return '8.5';
+  };
+
+  const loadDocuments = async () => {
+    if (!currentStudent?.roll_no) return;
+    const result = await listStudentDocuments(currentStudent.roll_no);
+    setDocuments(result.documents || []);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -36,6 +136,20 @@ export default function HomeScreen({ onNavigate }) {
       isMounted = false;
     };
   }, [currentStudent?.roll_no]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshProfile?.(),
+        loadDocuments(),
+      ]);
+    } catch (e) {
+      console.warn('Error refreshing overview:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const fullName = currentStudent?.name?.trim() || 'Scholar';
   const initials = currentStudent?.name
@@ -98,6 +212,9 @@ export default function HomeScreen({ onNavigate }) {
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
       >
         {/* Student Greeting Luxury Header with Sweep & Zoom Effect */}
         <View style={styles.greetingOuterWrapper}>
@@ -211,50 +328,57 @@ export default function HomeScreen({ onNavigate }) {
 
           <View style={styles.grid2x2}>
             <View style={styles.gridRow}>
+              {/* Card 1: Semester (Replaced Verified Degrees) */}
               <MetricCard
-                icon="military-tech"
+                icon="school"
                 iconColor={Colors.primary}
                 iconBgColor="rgba(163, 19, 33, 0.1)"
-                badgeText="Valid"
+                badgeText="Active"
                 badgeIcon="check-circle"
                 badgeBgColor="rgba(46, 125, 79, 0.1)"
                 badgeTextColor={Colors.verifiedGreen}
-                value="3"
-                label="Verified Degrees"
+                value={getSemesterDisplay()}
+                label="Current Semester"
                 cardBg="rgba(255, 241, 242, 0.5)"
                 borderColor="rgba(226, 190, 188, 0.7)"
+                onPress={() => Alert.alert('Academic Status', `Current Enrolled Term: ${getSemesterDisplay()} Semester\nAcademic Session: 2025–26\nInstitution: RIMT Academic Trust`)}
               />
               <View style={{ width: Spacing.spaceSm }} />
+              {/* Card 2: CGPA (Replaced Courses) */}
               <MetricCard
-                icon="history-edu"
+                icon="grade"
                 iconColor={Colors.secondary}
                 iconBgColor="rgba(62, 97, 134, 0.1)"
-                badgeText="CR-3"
-                badgeIcon={null}
+                badgeText="Scale 10.0"
+                badgeIcon="star"
                 badgeBgColor={Colors.surfaceContainerHigh}
                 badgeTextColor={Colors.secondary}
-                value="7"
-                label="Courses"
+                value={getCgpaDisplay()}
+                label="Cumulative CGPA"
                 cardBg="rgba(239, 246, 255, 0.5)"
                 borderColor="rgba(209, 228, 255, 0.8)"
+                onPress={() => onNavigate?.('profile')}
               />
             </View>
 
             <View style={[styles.gridRow, { marginTop: Spacing.spaceSm }]}>
+              {/* Card 3: Projects (Replaced Saved Repositories) */}
               <MetricCard
-                icon="alt-route"
-                iconColor={Colors.textPrimary}
-                iconBgColor="rgba(88, 107, 134, 0.12)"
-                badgeText="Git Synced"
-                badgeIcon={null}
-                badgeBgColor="rgba(62, 97, 134, 0.12)"
-                badgeTextColor={Colors.secondary}
-                value="12"
-                label="Saved Repositories"
+                icon="code"
+                iconColor="#4F46E5"
+                iconBgColor="rgba(79, 70, 229, 0.1)"
+                badgeText="Portfolio"
+                badgeIcon="folder"
+                badgeBgColor="rgba(79, 70, 229, 0.1)"
+                badgeTextColor="#4F46E5"
+                value={String(projectCount)}
+                label={projectCount === 1 ? 'Academic Project' : 'Academic Projects'}
                 cardBg="rgba(243, 244, 255, 0.5)"
                 borderColor="rgba(218, 227, 244, 0.8)"
+                onPress={() => onNavigate?.('projects')}
               />
               <View style={{ width: Spacing.spaceSm }} />
+              {/* Card 4: Profile Completed (Unchanged) */}
               <MetricCard
                 icon="verified"
                 iconColor={Colors.verifiedGreen}
@@ -267,6 +391,7 @@ export default function HomeScreen({ onNavigate }) {
                 label="Profile Completed"
                 cardBg="rgba(240, 253, 244, 0.5)"
                 borderColor="rgba(187, 247, 208, 0.8)"
+                onPress={() => onNavigate?.('profile')}
               />
             </View>
           </View>
@@ -288,60 +413,6 @@ export default function HomeScreen({ onNavigate }) {
           <View style={styles.actionGrid}>
             <View style={styles.actionRow}>
               <ActionTile
-                icon="school"
-                iconColor={Colors.primary}
-                iconBgColor="rgba(163, 19, 33, 0.08)"
-                title="My Degrees"
-                onPress={() => onNavigate?.('credentials')}
-              />
-              <View style={{ width: Spacing.spaceSm }} />
-              <ActionTile
-                icon="card-membership"
-                iconColor={Colors.secondary}
-                iconBgColor="rgba(62, 97, 134, 0.08)"
-                title="Certificates"
-                onPress={() => onNavigate?.('credentials')}
-              />
-            </View>
-
-            <View style={[styles.actionRow, { marginTop: Spacing.spaceSm }]}>
-              <ActionTile
-                icon="terminal"
-                iconColor={Colors.secondary}
-                iconBgColor="rgba(88, 107, 134, 0.08)"
-                title="My Projects"
-                onPress={() => onNavigate?.('projects')}
-              />
-              <View style={{ width: Spacing.spaceSm }} />
-              <ActionTile
-                icon="post-add"
-                iconColor={Colors.primary}
-                iconBgColor="rgba(163, 19, 33, 0.08)"
-                title="Add Project"
-                onPress={() => onNavigate?.('projects')}
-              />
-            </View>
-
-            <View style={[styles.actionRow, { marginTop: Spacing.spaceSm }]}>
-              <ActionTile
-                icon="account-box"
-                iconColor={Colors.secondary}
-                iconBgColor="rgba(62, 97, 134, 0.08)"
-                title="My Profile"
-                onPress={() => onNavigate?.('profile')}
-              />
-              <View style={{ width: Spacing.spaceSm }} />
-              <ActionTile
-                icon="workspace-premium"
-                iconColor={Colors.secondary}
-                iconBgColor="rgba(62, 97, 134, 0.08)"
-                title="Certificates"
-                onPress={() => onNavigate?.('credentials')}
-              />
-            </View>
-
-            <View style={[styles.actionRow, { marginTop: Spacing.spaceSm }]}>
-              <ActionTile
                 icon="description"
                 iconColor={Colors.tertiary}
                 iconBgColor="rgba(88, 107, 134, 0.1)"
@@ -357,36 +428,6 @@ export default function HomeScreen({ onNavigate }) {
                 title="Internships"
                 subtitle="2 verified"
                 onPress={() => Alert.alert('Internships', '2 institutional internships verified by department.')}
-              />
-            </View>
-
-            <View style={[styles.actionRow, { marginTop: Spacing.spaceSm }]}>
-              <ActionTile
-                icon="stars"
-                iconColor={Colors.verifiedGreen}
-                iconBgColor="rgba(46, 125, 79, 0.1)"
-                title="Placement"
-                subtitle="Session '25–26"
-                onPress={() => onNavigate?.('placement')}
-              />
-              <View style={{ width: Spacing.spaceSm }} />
-              <ActionTile
-                icon="lock-outline"
-                iconColor={Colors.primary}
-                iconBgColor="rgba(163, 19, 33, 0.08)"
-                title="Lock Gateway"
-                subtitle="Sign Out"
-                onPress={() => {
-                  Alert.alert(
-                    'Lock Session',
-                    'Would you like to lock your session or view the onboarding tour?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Onboarding Tour', onPress: () => onNavigate?.('onboarding') },
-                      { text: 'Sign Out', style: 'destructive', onPress: () => onNavigate?.('signin') },
-                    ]
-                  );
-                }}
               />
             </View>
           </View>

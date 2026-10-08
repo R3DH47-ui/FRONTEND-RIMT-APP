@@ -243,42 +243,64 @@ export default function PlacementScreen({ onNavigate }) {
           <TouchableOpacity
             style={[styles.subTabButton, activeSubTab === 'placed' && styles.subTabButtonActive]}
             onPress={() => setActiveSubTab('placed')}
+            activeOpacity={0.8}
           >
             <MaterialIcons
               name="school"
-              size={18}
-              color={activeSubTab === 'placed' ? Colors.primary : Colors.textSecondary}
+              size={17}
+              color={activeSubTab === 'placed' ? Colors.primary : '#64748B'}
             />
-            <Text style={[styles.subTabText, activeSubTab === 'placed' && styles.subTabTextActive]}>
-              Placed Scholars ({placedStudents.length})
+            <Text
+              numberOfLines={1}
+              style={[styles.subTabText, activeSubTab === 'placed' && styles.subTabTextActive]}
+            >
+              Scholars
             </Text>
+            <View style={[styles.subTabBadge, activeSubTab === 'placed' && styles.subTabBadgeActive]}>
+              <Text style={[styles.subTabBadgeText, activeSubTab === 'placed' && styles.subTabBadgeTextActive]}>
+                {placedStudents.length}
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.subTabButton, activeSubTab === 'companies' && styles.subTabButtonActive]}
             onPress={() => setActiveSubTab('companies')}
+            activeOpacity={0.8}
           >
             <MaterialIcons
               name="business"
-              size={18}
-              color={activeSubTab === 'companies' ? Colors.primary : Colors.textSecondary}
+              size={17}
+              color={activeSubTab === 'companies' ? Colors.primary : '#64748B'}
             />
-            <Text style={[styles.subTabText, activeSubTab === 'companies' && styles.subTabTextActive]}>
-              Companies ({registeredCompanies.length})
+            <Text
+              numberOfLines={1}
+              style={[styles.subTabText, activeSubTab === 'companies' && styles.subTabTextActive]}
+            >
+              Companies
             </Text>
+            <View style={[styles.subTabBadge, activeSubTab === 'companies' && styles.subTabBadgeActive]}>
+              <Text style={[styles.subTabBadgeText, activeSubTab === 'companies' && styles.subTabBadgeTextActive]}>
+                {registeredCompanies.length}
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.subTabButton, activeSubTab === 'analytics' && styles.subTabButtonActive]}
             onPress={() => setActiveSubTab('analytics')}
+            activeOpacity={0.8}
           >
             <MaterialIcons
-              name="analytics"
-              size={18}
-              color={activeSubTab === 'analytics' ? Colors.primary : Colors.textSecondary}
+              name="insights"
+              size={17}
+              color={activeSubTab === 'analytics' ? Colors.primary : '#64748B'}
             />
-            <Text style={[styles.subTabText, activeSubTab === 'analytics' && styles.subTabTextActive]}>
-              Analytics &amp; Tiers
+            <Text
+              numberOfLines={1}
+              style={[styles.subTabText, activeSubTab === 'analytics' && styles.subTabTextActive]}
+            >
+              Analytics
             </Text>
           </TouchableOpacity>
         </View>
@@ -434,7 +456,7 @@ export default function PlacementScreen({ onNavigate }) {
                         <View style={styles.scholarBioBox}>
                           <MaterialIcons name="format-quote" size={14} color={Colors.primary} />
                           <Text style={styles.scholarBioText} numberOfLines={2}>
-                            "{item.student.bio}"
+                            {`"${item.student.bio}"`}
                           </Text>
                         </View>
                       ) : null}
@@ -1125,27 +1147,32 @@ const styles = StyleSheet.create({
   /* Sub Tab Bar */
   subTabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: Radii.md,
-    padding: 4,
+    backgroundColor: '#EEF2F6',
+    borderRadius: 12,
+    padding: 3,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    height: 46,
   },
   subTabButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: Radii.sm,
+    height: 38,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    gap: 4,
   },
   subTabButtonActive: {
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 19, 33, 0.15)',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.08,
         shadowRadius: 4,
@@ -1158,10 +1185,30 @@ const styles = StyleSheet.create({
   subTabText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: '#64748B',
   },
   subTabTextActive: {
-    fontWeight: '800',
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  subTabBadge: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 8,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subTabBadgeActive: {
+    backgroundColor: 'rgba(163, 19, 33, 0.09)',
+  },
+  subTabBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  subTabBadgeTextActive: {
     color: Colors.primary,
   },
 

@@ -102,7 +102,7 @@ async function prepareFileForSharing(sourceUri, fileName) {
     let downloadRes;
     try {
       downloadRes = await FileSystem.downloadAsync(sourceUri, targetUri);
-    } catch (e) {
+    } catch (_e) {
       downloadRes = { status: 500 };
     }
 

@@ -57,14 +57,19 @@ export default function ProjectsScreen({ onNavigate }) {
   const [projects, setProjects] = useState(() => {
     return parseStudentProjects(currentStudent?.projects);
   });
+  const [prevRawProjects, setPrevRawProjects] = useState(currentStudent?.projects);
 
-  // Sync projects with currentStudent and remote DB
+  if (currentStudent?.projects !== prevRawProjects) {
+    setPrevRawProjects(currentStudent?.projects);
+    const parsed = parseStudentProjects(currentStudent?.projects);
+    if (parsed.length > 0) {
+      setProjects(parsed);
+    }
+  }
+
+  // Sync projects with remote DB
   useEffect(() => {
     let isMounted = true;
-    const initial = parseStudentProjects(currentStudent?.projects);
-    if (initial.length > 0) {
-      setProjects(initial);
-    }
 
     const fetchRemoteProjects = async () => {
       const studentId = currentStudent?.id;
@@ -143,7 +148,7 @@ export default function ProjectsScreen({ onNavigate }) {
       } else {
         Alert.alert('Link Notice', `Opening: ${fullUrl}`);
       }
-    } catch (e) {
+    } catch (_e) {
       Alert.alert('Link Notice', `Could not open ${label}: ${url}`);
     }
   };
