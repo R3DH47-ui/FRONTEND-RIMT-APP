@@ -17,6 +17,7 @@ import ProjectsScreen from './src/screens/ProjectsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CredentialsScreen from './src/screens/CredentialsScreen';
 import PlacementScreen from './src/screens/PlacementScreen';
+import ResumeScreen from './src/screens/ResumeScreen';
 
 import BottomNav from './src/components/BottomNav';
 
@@ -84,7 +85,7 @@ function MainNavigator() {
       currentStudent &&
       (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED');
 
-    const protectedScreens = ['home', 'placement', 'projects', 'profile', 'credentials'];
+    const protectedScreens = ['home', 'placement', 'projects', 'profile', 'credentials', 'resume'];
 
     if (protectedScreens.includes(screenId)) {
       if (!isApproved) {
@@ -165,6 +166,8 @@ function MainNavigator() {
         return <CredentialsScreen onNavigate={handleNavigate} />;
       case 'downloads':
         return <CredentialsScreen onNavigate={handleNavigate} />;
+      case 'resume':
+        return <ResumeScreen onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
       case 'home':
       default:
         return <HomeScreen onNavigate={handleNavigate} />;

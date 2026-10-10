@@ -65,6 +65,7 @@ c:\Users\r3dha\APP-RIMIT-(2)\
 │   ├── services/
 │   │   ├── authService.js        # Full auth lifecycle: signUp, signIn, checkStatus, signOut, updateProfile, getFullStudentData
 │   │   ├── documentService.js    # Document upload (Cloudinary signed), download, management & offline caching
+│   │   ├── resumeService.js      # ⭐ CVForge institutional resume builder engine, 4 ATS templates, vector HTML/PDF generation, direct Android IntentLauncher
 │   │   └── supabase.js           # Supabase client initialization from env vars
 │   │
 │   ├── screens/
@@ -76,6 +77,7 @@ c:\Users\r3dha\APP-RIMIT-(2)\
 │   │   ├── EditProfileScreen.jsx # Protected profile editor (APPROVED only) — bio, headline, avatar, banner
 │   │   ├── ProjectsScreen.jsx    # Student project portfolio with media attachments
 │   │   ├── CredentialsScreen.jsx # Certificate & credential vault with Cloudinary upload & verification badges
+│   │   ├── ResumeScreen.jsx      # ⭐ CVForge institutional resume builder (Templates, Editor, Review, AI Audit, direct Google Drive/PDF View)
 │   │   └── OnboardingScreen.jsx  # First-launch campus guide carousel
 │   │
 │   ├── components/
@@ -386,6 +388,7 @@ HomeScreen (APPROVED)
 | **Student Profession Badges** | `src/screens/EditProfileScreen.jsx`, `src/services/authService.js`, paired `PlacedStudentsCard.jsx` | ✅ Complete — Dynamic profession detection & custom badge styling (Cyber Security, Developer, Cloud, Dancer, Singer) |
 | **Official SVG Company Logos** | Paired `src/components/common/CompanyBrandLogo.jsx`, `PlacedStudentsCard.jsx`, `HiringCompaniesSection.jsx` | ✅ Complete — Pure vector SVG logos (Google, Microsoft, AWS, Deloitte, HDFC, TCS, L&T, Infosys, Wipro) |
 | **Multi-Account Admin Switching** | Paired `src/components/auth/AuthScreen.jsx`, `src/components/auth/AuthGuard.jsx`, `src/components/profile/ProfileMenu.jsx` | ✅ Complete — Google-style multi-account switcher with persistent isolation & instant switching between Raj Kumar & Sagrika |
+| **CVForge Institutional Resume Builder** | `src/screens/ResumeScreen.jsx`, `src/services/resumeService.js` | ✅ Complete — 4 ATS templates (Navy Executive, Slate Split, Walton Classic, Crimson Horizon), live Editor & Review, 99% ATS AI Audit, vector PDF export, direct Google Drive & PDF viewer intent opening with zero upload prompt, strict layout overflow containment. |
 
 ---
 
@@ -412,12 +415,31 @@ EXPO_PUBLIC_CLOUDINARY_SIGNING_URL=http://<LAN_IP>:3000/api/cloudinary/sign
 ---
 
 ## 10. Changelog
+- **2026-10-10 (CVForge Institutional Resume Builder, Direct Intent PDF Viewing & Zero-Overflow Layout):**
+  1. **CVForge Institutional Resume Builder (`ResumeScreen.jsx` & `resumeService.js`):** Engineered complete in-app resume suite featuring:
+     - 4 Verified Institutional ATS Templates: `navy_ledger` (Navy Executive Standard), `richard_sanchez` (Slate Split Modern), `herman_walton` (Corporate Analyst Classic), `sunny_singh` (Crimson Recruiter Horizon).
+     - 5 Top Navigation Capsule Tabs: `Templates`, `Editor`, `Review`, `AI Audit (88)`, and Overview Header.
+     - Section-by-section dynamic Editor with real-time add/remove rows and photo picker integration.
+     - Dedicated Read-Only Review tab displaying a clean A4 resume canvas with zero edit overlays.
+  2. **Direct Intent PDF Viewing Without Cloud Upload Prompts:**
+     - Solved the Android scoped sandbox error `Not allowed to read file under given URL` by configuring `Print.printToFileAsync({ html, base64: true })` and persisting the Base64 payload directly into `FileSystem.documentDirectory` (`CVForge_Resume_${Date.now()}.pdf`).
+     - **Open with Google Drive (`openResumeInDrive`):** Launches `android.intent.action.VIEW` targeting Google Drive's built-in viewer activities (`com.google.android.apps.docs.viewer.PdfViewerActivity` / `BrowseDocsExtensionActivity`) with `flags: 268435457` (`FLAG_GRANT_READ_URI_PERMISSION | FLAG_ACTIVITY_NEW_TASK`), opening the document directly on screen for reading with **zero upload dialogs**.
+     - **Open in PDF Viewer (`openResumePdfViewer`):** Directly invokes the device's default PDF viewer in view mode without upload prompts.
+  3. **Zero-Overflow Layout Architecture across All Templates:**
+     - Resolved layout bugs where long degree names and score badges (`Cumulative CGPA: 8.5 / 10.0`, `Aggregate: 88%`) overflowed past the right sheet boundary on mobile screens (~360dp).
+     - Structured education and experience items into clean vertical hierarchies (Degree Heading → Institution Subtitle → Dedicated Institutional Score Pill Badge) with `overflow: 'hidden'` across all templates.
+  4. **Review Tab UI Polish & Crimson Theme Harmony:**
+     - Removed redundant bottom floating `Export Vector PDF` button from the Review tab to keep the entire document unobstructed.
+     - Styled the top-right `[Export PDF]` header button in the app's signature crimson red theme (`Colors.primary = #A31321`).
 - **2026-10-07 (Student Profession Badges, SVG Company Branding & Multi-Account Isolation Sync):**
   1. **Student Profession & Specialization Badges (`PlacedStudentsCard.jsx`):** Integrated profession badges directly beside student names in the Placement Statistics dashboard. Categorizes students into distinct disciplines (Cyber Security, Cloud & DevOps, Full Stack Developer, Enterprise IT, Dancer, Singer, Risk Consultant, FinTech) with dedicated color auræ and icons.
   2. **Dynamic Student Profession Resolution (`placementStats.js`):** Enhanced fallback logic to inspect student departments, course specializations, and custom bio/headline text so that students from diverse backgrounds (BCA, BCA Cyber Security, B.Sc IT, or artistic passions) are accurately represented.
   3. **Official SVG Company Logos (`CompanyBrandLogo.jsx`):** Replaced raster icons and fallback symbols with self-contained, high-fidelity SVG brand marks for major campus recruiters (Google, Microsoft, AWS, Deloitte, HDFC Bank, TCS, L&T, Infosys, Wipro) across both `PlacedStudentsCard.jsx` and `HiringCompaniesSection.jsx`.
   4. **Multi-Account Session Isolation (Paired Admin Portal):** Fixed session race conditions in `ADMIN-PANEL-RIMT` where signing in as Sagrika would revert to Raj Kumar. Converted hardcoded localStorage reads to reactive state in `AuthGuard.jsx`, `ProfileMenu.jsx`, and `AuthScreen.jsx`. Created Google-style "Choose an account" switcher and "Add another account" modal.
   5. **Master Memory Synchronization:** Updated both `ADMIN.md` and `APP.md` with complete, exhaustive technical documentation ensuring both repositories operate as single sources of truth without exploratory token overhead.
+- **2026-10-10 (CVForge Resume Review Tab Fidelity & Profile Photo Synchronization):**
+  1. **Template 2 (`richard_sanchez` - Executive Slate Split) Review Tab Upgrade:** Replaced plain unformatted text in the Review tab with the authentic design system mirroring the Preview tab: added `sanchezSectionHeader` with dark underline (`borderBottomWidth: 1.5`), `sanchezContactItem`, formatted bullet skills and languages, `sanchezRightHeader` with circular emoji badges (👤, 💼, 🎓), and `sanchezTimelineWrap` with vertical slate timeline divider line (`borderLeftWidth: 1.5`), structured node headers, and score chips.
+  2. **Template 3 (`herman_walton` - Corporate Analyst Classic) Profile Photo Restoration:** Fixed missing profile avatar in the Review tab by switching from undefined styles to `styles.waltonPhotoBox` (56x68) and `styles.waltonPhotoImg` with fallback support. Restored the 4 corner crop marks (`waltonCornerTL`, `TR`, `BL`, `BR`) and harmonized contact strip formatting with phone, email, and location badges across both Preview and Review tabs and the exported PDF HTML template.
 - **2026-10-03 (Cloudinary Signed Upload Configuration):**
   1. **Signing URL Configured:** Added `EXPO_PUBLIC_CLOUDINARY_SIGNING_URL=http://10.31.161.176:3000/api/cloudinary/sign` to `.env`, resolving the "Cloudinary upload is not configured" error on the Certificates screen. Uses LAN IP for physical device connectivity.
   2. **Cross-Project Integration:** Mobile app's `documentService.js` now successfully obtains upload signatures from the admin portal's `/api/cloudinary/sign` endpoint for certificate and document uploads to Cloudinary.

@@ -418,7 +418,7 @@ export default function HomeScreen({ onNavigate }) {
                 iconBgColor="rgba(88, 107, 134, 0.1)"
                 title="Resume"
                 subtitle="PDF ready"
-                onPress={() => Alert.alert('Resume', 'Your verified institutional resume is ready to download.')}
+                onPress={() => onNavigate?.('resume')}
               />
               <View style={{ width: Spacing.spaceSm }} />
               <ActionTile
