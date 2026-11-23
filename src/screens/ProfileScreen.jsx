@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, Spacing, Typography, Radii, ImageAssets, FontFamilies } from '../theme/tokens';
+import { Colors, Spacing, Typography, Radii, ImageAssets, FontFamilies, getAvatarSource } from '../theme/tokens';
 import Header from '../components/Header';
 import ShineEffect from '../components/ShineEffect';
 import ZoomCard from '../components/ZoomCard';
@@ -175,7 +175,7 @@ export default function ProfileScreen({ onNavigate, onSignOut }) {
               <View style={styles.identityHeader}>
                 <View style={styles.avatarWrapper}>
                   <Image
-                    source={{ uri: currentStudent?.avatar_url || ImageAssets.studentAvatar }}
+                    source={getAvatarSource(currentStudent?.avatar_url)}
                     style={styles.avatarImage}
                   />
                   <View style={styles.avatarCheckBadge}>
