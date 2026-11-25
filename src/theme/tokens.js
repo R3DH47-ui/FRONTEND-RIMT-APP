@@ -309,6 +309,7 @@ export const ImageAssets = {
  */
 export const getAvatarSource = (avatar) => {
   if (!avatar) return ImageAssets.defaultAvatar;
+  if (typeof avatar === 'number') return avatar;
   if (typeof avatar === 'string') {
     const trimmed = avatar.trim();
     if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
@@ -322,6 +323,24 @@ export const getAvatarSource = (avatar) => {
     }
     return ImageAssets.defaultAvatar;
   }
-  return avatar;
+  return ImageAssets.defaultAvatar;
+};
+
+export const getImageSource = (src, fallback = ImageAssets.campusHero) => {
+  if (!src) return typeof fallback === 'string' ? { uri: fallback } : fallback;
+  if (typeof src === 'number') return src;
+  if (typeof src === 'string') {
+    const trimmed = src.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
+      return typeof fallback === 'string' ? { uri: fallback } : fallback;
+    }
+    return { uri: trimmed };
+  }
+  if (typeof src === 'object') {
+    if (src.uri && typeof src.uri === 'string' && src.uri.trim() && src.uri !== 'null') {
+      return src;
+    }
+  }
+  return typeof fallback === 'string' ? { uri: fallback } : fallback;
 };
 

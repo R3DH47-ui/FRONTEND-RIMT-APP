@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, SUPABASE_URL, SUPABASE_KEY } from './supabase';
+import { supabase } from './supabase';
 
 const NOTIFICATIONS_CACHE_KEY = '@rimt_notifications_cache';
 const READ_RECEIPTS_PREFIX = '@rimt_read_receipts_';
@@ -40,6 +40,8 @@ export const INITIAL_SEED_NOTIFICATIONS = [
     target_id: null,
     data: {
       drive_id: 'drive-tcs-2026',
+      form_slug: 'tcs-digital-ninja-2026',
+      registration_url: '/register/tcs-digital-ninja-2026',
       company_name: 'Tata Consultancy Services',
       role_title: 'Software Engineer / Systems Engineer',
       package_min: 7.5,
@@ -50,7 +52,7 @@ export const INITIAL_SEED_NOTIFICATIONS = [
       registration_deadline: '2026-10-24T23:59:00Z',
       min_cgpa: 6.5,
     },
-    action_route: 'placement',
+    action_route: 'register',
     created_by: 'T&P Administration',
     created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // 2 hours ago
   },
@@ -156,10 +158,20 @@ export async function fetchNotifications(studentRoll = 'anon') {
       });
       isFromRemote = true;
     } else if (error) {
-      console.warn('[notificationService] Supabase query error:', error.message, error.code, error.details);
+      const msg = String(error.message || '');
+      if (msg.includes('fetch failed') || msg.includes('UnknownHostException') || msg.includes('Network request failed')) {
+        console.log('[notificationService] ℹ️ Supabase network offline; using cached notifications.');
+      } else {
+        console.warn('[notificationService] Supabase query notice:', error.message);
+      }
     }
   } catch (e) {
-    console.warn('[notificationService] Supabase query notice:', e.message || e);
+    const msg = String(e?.message || e);
+    if (msg.includes('fetch failed') || msg.includes('UnknownHostException') || msg.includes('Network request failed')) {
+      console.log('[notificationService] ℹ️ Supabase offline; using local cache.');
+    } else {
+      console.warn('[notificationService] Supabase query notice:', msg);
+    }
   }
 
   // 2. Load cached notifications from AsyncStorage
@@ -281,7 +293,7 @@ export async function deleteNotification(notificationId) {
  * Subscribe to live Supabase Realtime notifications
  * Listens for new INSERT events on public.notifications
  */
-export function subscribeToRealtimeNotifications(onNotificationReceived) {
+export function subscribeToRealtimeNotifications(onNotificationReceived, onStatusChange) {
   try {
     const channel = supabase
       .channel('rimt_public_notifications_feed')
@@ -296,11 +308,14 @@ export function subscribeToRealtimeNotifications(onNotificationReceived) {
       )
       .subscribe((status) => {
         console.log('[notificationService] Realtime subscription status:', status);
+        if (typeof onStatusChange === 'function') {
+          onStatusChange(status);
+        }
         if (status === 'SUBSCRIBED') {
           // Connected to live PostgreSQL Logical Replication
           console.log('[notificationService] ✅ Realtime: Subscribed to notifications table');
         } else if (status === 'CHANNEL_ERROR') {
-          console.warn('[notificationService] ⚠️ Realtime: Channel error — notifications table may not be in supabase_realtime publication');
+          console.log('[notificationService] ℹ️ Realtime channel standby (reconnecting in background)...');
         }
       });
 
@@ -373,8 +388,10 @@ export async function simulateNotification(type = 'internship', customData = {})
         starts_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
         registration_deadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 4).toISOString(),
         min_cgpa: 7.5,
+        form_slug: customData.form_slug || 'google-cloud-specialist-drive-2026',
+        registration_url: customData.registration_url || '/register/google-cloud-specialist-drive-2026',
       },
-      action_route: 'placement',
+      action_route: 'register',
       created_by: 'Dean T&P Office',
       created_at: now,
       is_read: false,

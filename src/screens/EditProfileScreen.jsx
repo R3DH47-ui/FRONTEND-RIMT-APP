@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors, FontFamilies, ImageAssets, Radii, Spacing, Typography } from '../theme/tokens';
+import { Colors, FontFamilies, ImageAssets, Radii, Spacing, Typography, getAvatarSource, getImageSource } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { AVAILABLE_COURSES } from './OnboardingScreen';
 import ZoomCard from '../components/ZoomCard';
@@ -130,7 +130,7 @@ export default function EditProfileScreen({ onBack }) {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageCard}>
-          <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
+          <Image source={getImageSource(bannerUri, ImageAssets.campusHero)} style={styles.bannerImage} />
           <LinearGradient
             colors={['rgba(18,38,61,0.12)', 'rgba(18,38,61,0.88)']}
             style={StyleSheet.absoluteFillObject}
@@ -145,7 +145,7 @@ export default function EditProfileScreen({ onBack }) {
           </TouchableOpacity>
           <View style={styles.avatarRow}>
             <View style={styles.avatarFrame}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={getAvatarSource(avatarAsset?.uri || currentStudent?.avatar_url)} style={styles.avatar} />
             </View>
             <View style={styles.avatarCopy}>
               <Text style={styles.avatarTitle}>Scholar portrait</Text>

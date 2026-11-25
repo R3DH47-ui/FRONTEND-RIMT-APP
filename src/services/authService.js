@@ -793,3 +793,125 @@ export const hasRegisteredStudents = async () => {
     return false;
   }
 };
+
+/**
+ * Fetch full student dossier — aggregates the base student record with
+ * all related tables (profiles, projects, git_projects, certificates,
+ * internships, academic_summary, semester_records).
+ *
+ * Used by AuthContext.js for real-time synchronization when Supabase
+ * Realtime fires change events on dossier tables.
+ *
+ * @param {{ id?: string, roll_no?: string, roll_number?: string }} studentPartial
+ * @returns {Promise<object|null>} Full merged student record
+ */
+export const getFullStudentData = async (studentPartial) => {
+  const studentId = studentPartial?.id;
+  const rollNo = normalizeRollNo(studentPartial?.roll_no || studentPartial?.roll_number);
+
+  if (!studentId && !rollNo) return studentPartial || null;
+
+  try {
+    // 1. Fetch base student record
+    let baseStudent = studentPartial;
+    if (studentId || rollNo) {
+      let query = supabase.from('students').select('*');
+      if (studentId) {
+        query = query.eq('id', studentId);
+      } else {
+        query = query.ilike('roll_no', rollNo);
+      }
+      const { data } = await query.maybeSingle();
+      if (data) baseStudent = data;
+    }
+
+    // Build normalized student
+    const fullName = baseStudent.full_name || baseStudent.name || null;
+    const rollNumber = baseStudent.roll_number || baseStudent.roll_no || rollNo;
+    const department = baseStudent.department || baseStudent.course || null;
+    const yearSemester = baseStudent.year_semester || baseStudent.batch || baseStudent.semester || null;
+    const rawStatus = (baseStudent.status || 'UNKNOWN').toUpperCase();
+    const status = rawStatus === 'VERIFIED' ? 'APPROVED' : rawStatus;
+
+    let skills = baseStudent.skills || [];
+    if (typeof skills === 'string') {
+      try { skills = JSON.parse(skills); } catch { skills = []; }
+    }
+    let projects = baseStudent.projects || [];
+    if (typeof projects === 'string') {
+      try { projects = JSON.parse(projects); } catch { projects = []; }
+    }
+
+    const normalized = {
+      ...baseStudent,
+      id: baseStudent.id || null,
+      full_name: fullName,
+      name: fullName,
+      roll_number: rollNumber,
+      roll_no: rollNumber,
+      department,
+      course: department,
+      year_semester: yearSemester,
+      batch: yearSemester,
+      semester: yearSemester,
+      status,
+      skills,
+      projects,
+    };
+
+    if (!normalized.id) return normalized;
+    const sid = normalized.id;
+
+    // 2. Fetch related dossier tables in parallel
+    const [profileRes, projectsRes, gitProjectsRes, certsRes, internshipsRes, academicRes, semesterRes] =
+      await Promise.allSettled([
+        supabase.from('student_profiles').select('*').eq('student_id', sid).maybeSingle(),
+        supabase.from('student_projects').select('*').eq('student_id', sid).eq('is_visible', true).order('sort_order'),
+        supabase.from('student_git_projects').select('*').eq('student_id', sid).eq('is_visible', true).order('sort_order'),
+        supabase.from('student_certificates').select('*').eq('student_id', sid).eq('is_visible', true).order('created_at', { ascending: false }),
+        supabase.from('student_internships').select('*').eq('student_id', sid).order('start_date', { ascending: false }),
+        supabase.from('student_academic_summary').select('*').eq('student_id', sid).maybeSingle(),
+        supabase.from('student_semester_records').select('*').eq('student_id', sid).order('semester'),
+      ]);
+
+    const profile = profileRes.status === 'fulfilled' ? profileRes.value?.data : null;
+    const dbProjects = projectsRes.status === 'fulfilled' ? (projectsRes.value?.data || []) : [];
+    const gitProjects = gitProjectsRes.status === 'fulfilled' ? (gitProjectsRes.value?.data || []) : [];
+    const certificates = certsRes.status === 'fulfilled' ? (certsRes.value?.data || []) : [];
+    const internships = internshipsRes.status === 'fulfilled' ? (internshipsRes.value?.data || []) : [];
+    const academicSummary = academicRes.status === 'fulfilled' ? academicRes.value?.data : null;
+    const semesterRecords = semesterRes.status === 'fulfilled' ? (semesterRes.value?.data || []) : [];
+
+    // 3. Merge profile fields
+    if (profile) {
+      normalized.bio = profile.bio || normalized.bio;
+      normalized.headline = profile.headline || normalized.headline;
+      normalized.skills = profile.skills || normalized.skills;
+      normalized.linkedin_url = profile.linkedin_url || null;
+      normalized.github_url = profile.github_url || null;
+      normalized.portfolio_url = profile.portfolio_url || null;
+      normalized.resume_url = profile.resume_url || normalized.resume_url || null;
+      normalized.profile = profile;
+    }
+
+    // 4. Merge academic summary
+    if (academicSummary) {
+      normalized.cgpa = academicSummary.cgpa || normalized.cgpa;
+      normalized.overall_attendance = academicSummary.overall_attendance || null;
+      normalized.backlogs = academicSummary.backlogs ?? null;
+      normalized.academic_summary = academicSummary;
+    }
+
+    // 5. Attach dossier arrays
+    normalized.projects = dbProjects.length > 0 ? dbProjects : (Array.isArray(projects) ? projects : []);
+    normalized.git_projects = gitProjects;
+    normalized.certificates = certificates;
+    normalized.internships = internships;
+    normalized.semester_records = semesterRecords;
+
+    return normalized;
+  } catch (err) {
+    console.warn('[getFullStudentData] Error fetching dossier:', err?.message);
+    return studentPartial || null;
+  }
+};
