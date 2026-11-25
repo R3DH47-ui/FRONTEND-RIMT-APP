@@ -19,6 +19,7 @@ import { Colors, Spacing, Radii, getAvatarSource } from '../theme/tokens';
 import Header from '../components/Header';
 import ZoomCard from '../components/ZoomCard';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import {
   fetchPlacedStudents,
   fetchRegisteredCompanies,
@@ -27,6 +28,7 @@ import {
 
 export default function PlacementScreen({ onNavigate }) {
   const { currentStudent } = useAuth();
+  const { unreadCount } = useNotifications();
 
   // Tab & Filter States
   const [activeSubTab, setActiveSubTab] = useState('placed'); // 'placed' | 'companies' | 'analytics'
@@ -155,8 +157,9 @@ export default function PlacementScreen({ onNavigate }) {
         title="Campus Placements"
         eyebrow="RIMT CAREER & PLACEMENT TRUST"
         avatarUrl={currentStudent?.avatar_url || currentStudent?.avatar}
+        unreadCount={unreadCount}
         onProfilePress={() => onNavigate?.('profile')}
-        onNotificationPress={() => onNavigate?.('home')}
+        onNotificationPress={() => onNavigate?.('notifications')}
       />
 
       <ScrollView

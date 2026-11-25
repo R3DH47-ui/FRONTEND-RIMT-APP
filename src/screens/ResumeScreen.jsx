@@ -31,8 +31,8 @@ import {
   uploadResumePhotoToCloudinary,
   downloadResumeToDevice,
   prepareResumeDataForRender,
-  AI_SUGGESTIONS,
 } from '../services/resumeService';
+import { analyzeResumeWithGemini } from '../services/geminiResumeDetectorService';
 
 // Archival Editorial Design Tokens
 const ArchivalColors = {
@@ -53,17 +53,19 @@ const ArchivalColors = {
   diffAddText: '#1b5e20',
 };
 
-export default function ResumeScreen({ onBack }) {
+export default function ResumeScreen({ onBack, onNavigate }) {
   const { currentStudent, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('preview'); // 'preview' | 'templates' | 'editor' | 'review' | 'ai'
   const [resumeData, setResumeData] = useState(null);
+  const [isScanningGemini, setIsScanningGemini] = useState(false);
+  const [geminiReport, setGeminiReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [activeTemplateId, setActiveTemplateId] = useState('navy_ledger');
   const [activeEditorSection, setActiveEditorSection] = useState('personal'); // 'personal' | 'summary' | 'skills' | 'education' | 'experience' | 'internships' | 'languages' | 'references' | 'projects' | 'additional'
-  const [aiSuggestions, setAiSuggestions] = useState(AI_SUGGESTIONS);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
   const [appliedCount, setAppliedCount] = useState(0);
   const [exportSuccessModal, setExportSuccessModal] = useState(null);
   const [cachedExportPdf, setCachedExportPdf] = useState(null);
@@ -527,6 +529,47 @@ export default function ResumeScreen({ onBack }) {
     );
     setAppliedCount((c) => c + 1);
     Alert.alert('✨ AI Suggestion Applied', 'Resume draft updated with quantifiable ATS bullet enhancement.');
+  };
+
+  // Real-Time Gemini 3.8 Flash ATS Audit
+  const handleRunLiveGeminiAudit = async () => {
+    if (!resumeData) return;
+    setIsScanningGemini(true);
+    try {
+      const report = await analyzeResumeWithGemini({
+        structuredData: resumeData,
+        targetRole: 'Software Engineer (Full Stack)',
+      });
+      setGeminiReport(report);
+      const remList = report.remediations || report.improvements || [];
+      if (Array.isArray(remList) && remList.length > 0) {
+        setAiSuggestions(
+          remList.map((imp) => ({
+            id: imp.id,
+            category: imp.category || 'Forensic Remediation',
+            field: (imp.field || '').toLowerCase().includes('project')
+              ? 'projects'
+              : (imp.field || '').toLowerCase().includes('summary')
+              ? 'summary'
+              : 'experience',
+            title: imp.title,
+            original: imp.originalSnippet || imp.original,
+            suggested: imp.enterpriseRewrite || imp.improved,
+            reason: imp.rationale,
+            applied: false,
+          }))
+        );
+      }
+      Alert.alert(
+        `Forensic ATS Score: ${report.overallScore}/100`,
+        `${report.atsStatus}\n\n${report.summaryVerdict}`
+      );
+    } catch (err) {
+      console.warn('Live audit error:', err);
+      Alert.alert('Notice', 'Audit completed: ' + err.message);
+    } finally {
+      setIsScanningGemini(false);
+    }
   };
 
   // Skills handlers
@@ -2277,33 +2320,109 @@ export default function ResumeScreen({ onBack }) {
             contentContainerStyle={styles.aiAuditContainer}
             showsVerticalScrollIndicator={false}
           >
-            <ZoomCard scaleTo={1.02}>
-              <View style={styles.aiScorecard}>
-                <View style={styles.scoreCircle}>
-                  <Text style={styles.scoreNumber}>88</Text>
-                  <Text style={styles.scoreOutOf}>/ 100</Text>
+            {/* Quick Link to Dedicated AI Resume Detector */}
+            <ZoomCard scaleTo={1.02} onPress={() => onNavigate?.('resume-detector')}>
+              <View style={styles.openDetectorBanner}>
+                <View style={styles.openDetectorIconBg}>
+                  <MaterialIcons name="document-scanner" size={24} color="#ffffff" />
                 </View>
-                <View style={styles.aiScorecardRight}>
-                  <Text style={styles.aiScoreHeading}>High ATS Compatibility</Text>
-                  <Text style={styles.aiScoreSub}>Institutional audit confirms high readability across campus recruitment filters.</Text>
-                  <View style={styles.miniScoreBarRow}>
-                    <Text style={styles.miniScoreLabel}>Action Verbs</Text>
-                    <View style={styles.miniScoreTrack}><View style={[styles.miniScoreFill, { width: '92%' }]} /></View>
-                    <Text style={styles.miniScoreValue}>92%</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.openDetectorTitle}>Resume Review & AI Rewrite</Text>
+                    <View style={styles.geminiMiniBadge}>
+                      <Text style={styles.geminiMiniBadgeText}>Google AI</Text>
+                    </View>
                   </View>
-                  <View style={styles.miniScoreBarRow}>
-                    <Text style={styles.miniScoreLabel}>Metrics Scope</Text>
-                    <View style={styles.miniScoreTrack}><View style={[styles.miniScoreFill, { width: '85%' }]} /></View>
-                    <Text style={styles.miniScoreValue}>85%</Text>
-                  </View>
-                  <View style={styles.miniScoreBarRow}>
-                    <Text style={styles.miniScoreLabel}>ATS Layout</Text>
-                    <View style={styles.miniScoreTrack}><View style={[styles.miniScoreFill, { width: '98%' }]} /></View>
-                    <Text style={styles.miniScoreValue}>98%</Text>
-                  </View>
+                  <Text style={styles.openDetectorSub}>
+                    Check ATS score, solve all resume mistakes with AI, and apply to your CV
+                  </Text>
                 </View>
+                <MaterialIcons name="arrow-forward" size={20} color={ArchivalColors.spruce} />
               </View>
             </ZoomCard>
+
+            {/* Live Scan Trigger Bar */}
+            <View style={styles.liveScanRow}>
+              <TouchableOpacity
+                style={[styles.liveScanBtn, isScanningGemini && { opacity: 0.7 }]}
+                onPress={handleRunLiveGeminiAudit}
+                disabled={isScanningGemini}
+                activeOpacity={0.8}
+              >
+                {isScanningGemini ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <MaterialIcons name="assessment" size={18} color="#ffffff" />
+                )}
+                <Text style={styles.liveScanBtnText}>
+                  {isScanningGemini ? 'Running Forensic Audit...' : 'Audit Current CV with ATS Engine'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Scorecard Hero (Only when real report exists) */}
+            {geminiReport ? (
+              <ZoomCard scaleTo={1.02}>
+                <View style={styles.aiScorecard}>
+                  <View style={styles.scoreCircle}>
+                    <Text style={styles.scoreNumber}>{geminiReport.overallScore}</Text>
+                    <Text style={styles.scoreOutOf}>/ 100</Text>
+                  </View>
+                  <View style={styles.aiScorecardRight}>
+                    <Text style={styles.aiScoreHeading}>{geminiReport.atsStatus}</Text>
+                    <Text style={styles.aiScoreSub}>{geminiReport.summaryVerdict}</Text>
+                    <View style={styles.miniScoreBarRow}>
+                      <Text style={styles.miniScoreLabel}>Action Verbs</Text>
+                      <View style={styles.miniScoreTrack}>
+                        <View style={[styles.miniScoreFill, { width: `${geminiReport.subScores?.actionVerbAgency ?? geminiReport.subScores?.actionVerbs ?? 80}%` }]} />
+                      </View>
+                      <Text style={styles.miniScoreValue}>{geminiReport.subScores?.actionVerbAgency ?? geminiReport.subScores?.actionVerbs ?? 80}%</Text>
+                    </View>
+                    <View style={styles.miniScoreBarRow}>
+                      <Text style={styles.miniScoreLabel}>Metrics Scope</Text>
+                      <View style={styles.miniScoreTrack}>
+                        <View style={[styles.miniScoreFill, { width: `${geminiReport.subScores?.quantificationImpact ?? geminiReport.subScores?.quantification ?? 70}%` }]} />
+                      </View>
+                      <Text style={styles.miniScoreValue}>{geminiReport.subScores?.quantificationImpact ?? geminiReport.subScores?.quantification ?? 70}%</Text>
+                    </View>
+                    <View style={styles.miniScoreBarRow}>
+                      <Text style={styles.miniScoreLabel}>ATS Layout</Text>
+                      <View style={styles.miniScoreTrack}>
+                        <View style={[styles.miniScoreFill, { width: `${geminiReport.subScores?.machineParseability ?? geminiReport.subScores?.atsReadability ?? 85}%` }]} />
+                      </View>
+                      <Text style={styles.miniScoreValue}>{geminiReport.subScores?.machineParseability ?? geminiReport.subScores?.atsReadability ?? 85}%</Text>
+                    </View>
+                  </View>
+                </View>
+              </ZoomCard>
+            ) : (
+              <View style={styles.emptyIntakeBannerMini}>
+                <MaterialIcons name="fact-check" size={28} color={ArchivalColors.spruce} />
+                <Text style={styles.emptyIntakeTitleMini}>No Diagnostic Audit Run Yet</Text>
+                <Text style={styles.emptyIntakeSubMini}>
+                  Tap &quot;Audit Current CV with ATS Engine&quot; above to simulate Fortune 500 ATS filters on your active draft, or tap the studio banner to upload an external PDF.
+                </Text>
+              </View>
+            )}
+
+            {/* Detected Mistakes if available from Gemini */}
+            {geminiReport?.mistakes && geminiReport.mistakes.length > 0 && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={styles.sectionHeading}>Detected Red Flags ({geminiReport.mistakes.length})</Text>
+                {geminiReport.mistakes.map((m) => (
+                  <View key={m.id} style={styles.miniMistakeCard}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={[styles.miniMistakeSeverity, { color: m.severity === 'CRITICAL' ? '#ba1a1a' : '#b7791f' }]}>
+                        {m.severity} · {m.section}
+                      </Text>
+                    </View>
+                    <Text style={styles.miniMistakeTitle}>{m.title}</Text>
+                    <Text style={styles.miniMistakeDesc}>{m.description}</Text>
+                    <Text style={styles.miniMistakeFix}>💡 {m.quickFix}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <View style={styles.aiSectionTitleRow}>
               <Text style={styles.sectionHeading}>Intelligent Bullet Improvements</Text>
@@ -4177,6 +4296,116 @@ const styles = StyleSheet.create({
 
   // TAB 4: AI AUDIT
   aiAuditContainer: { padding: 14, paddingBottom: 40 },
+  openDetectorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: ArchivalColors.spruce,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  openDetectorIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: ArchivalColors.spruce,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openDetectorTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: ArchivalColors.deepSpruce,
+  },
+  geminiMiniBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  geminiMiniBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  openDetectorSub: {
+    fontSize: 10.5,
+    color: ArchivalColors.mutedInk,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  liveScanRow: {
+    marginBottom: 12,
+  },
+  liveScanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  liveScanBtnText: {
+    color: '#ffffff',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  miniMistakeCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: ArchivalColors.hairline,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  miniMistakeSeverity: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  miniMistakeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: ArchivalColors.ink,
+    marginBottom: 2,
+  },
+  miniMistakeDesc: {
+    fontSize: 11,
+    color: ArchivalColors.mutedInk,
+    lineHeight: 15,
+    marginBottom: 4,
+  },
+  miniMistakeFix: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: ArchivalColors.spruce,
+  },
+  emptyIntakeBannerMini: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: ArchivalColors.hairline,
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyIntakeTitleMini: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: ArchivalColors.deepSpruce,
+    marginTop: 8,
+  },
+  emptyIntakeSubMini: {
+    fontSize: 11.5,
+    color: ArchivalColors.mutedInk,
+    textAlign: 'center',
+    lineHeight: 16,
+    marginTop: 4,
+  },
   aiScorecard: {
     backgroundColor: ArchivalColors.sheet,
     borderWidth: 1,

@@ -22,11 +22,13 @@ import Header from '../components/Header';
 import ZoomCard from '../components/ZoomCard';
 import ViewToggle from '../components/ViewToggle';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { supabase } from '../services/supabase';
 import { uploadStudentDocument } from '../services/documentService';
 
 export default function ProjectsScreen({ onNavigate }) {
   const { currentStudent, updateProfile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [viewMode, setViewMode] = useState('stack'); // 'stack' | 'grid'
   const [modalVisible, setModalVisible] = useState(false);
@@ -459,7 +461,8 @@ export default function ProjectsScreen({ onNavigate }) {
         title="Projects"
         eyebrow="RIMT ACADEMIC TRUST"
         avatarUrl={currentStudent?.avatar_url || ImageAssets.profileAvatarSecondary}
-        onNotificationPress={() => Alert.alert('Notifications', 'Repository webhook synced successfully.')}
+        unreadCount={unreadCount}
+        onNotificationPress={() => onNavigate?.('notifications')}
         onProfilePress={() => onNavigate?.('profile')}
       />
 

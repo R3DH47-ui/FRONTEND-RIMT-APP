@@ -12,16 +12,18 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Colors, Spacing, Typography, Radii, ImageAssets, FontFamilies } from '../theme/tokens';
+import { Colors, Spacing, Typography, Radii, ImageAssets, FontFamilies, getAvatarSource } from '../theme/tokens';
 import Header from '../components/Header';
 import ShineEffect from '../components/ShineEffect';
 import ZoomCard from '../components/ZoomCard';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import EditProfileScreen from './EditProfileScreen';
 import NoticeModal from '../components/NoticeModal';
 
 export default function ProfileScreen({ onNavigate, onSignOut }) {
   const { currentStudent, signOut, refreshProfile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const [pulseAnim] = useState(() => new Animated.Value(0));
   const [isEditing, setIsEditing] = useState(false);
@@ -67,7 +69,8 @@ export default function ProfileScreen({ onNavigate, onSignOut }) {
       <Header
         title="Profile"
         eyebrow="RIMT ACADEMIC TRUST"
-        onNotificationPress={() => Alert.alert('Notifications', 'Profile documents reviewed.')}
+        unreadCount={unreadCount}
+        onNotificationPress={() => onNavigate?.('notifications')}
         avatarUrl={currentStudent?.avatar_url || ImageAssets.profileAvatarSecondary}
         onProfilePress={() => setNotice({
           title: 'Scholar ID',
@@ -172,7 +175,7 @@ export default function ProfileScreen({ onNavigate, onSignOut }) {
               <View style={styles.identityHeader}>
                 <View style={styles.avatarWrapper}>
                   <Image
-                    source={{ uri: currentStudent?.avatar_url || ImageAssets.studentAvatar }}
+                    source={getAvatarSource(currentStudent?.avatar_url)}
                     style={styles.avatarImage}
                   />
                   <View style={styles.avatarCheckBadge}>

@@ -20,11 +20,13 @@ import DocumentCard from '../components/DocumentCard';
 import ShineEffect from '../components/ShineEffect';
 import ZoomCard from '../components/ZoomCard';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { listStudentDocuments, toDocumentCardProps } from '../services/documentService';
 import { supabase } from '../services/supabase';
 
 export default function HomeScreen({ onNavigate }) {
   const { currentStudent, refreshProfile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
   const [activityCleared, setActivityCleared] = useState(false);
   const [documents, setDocuments] = useState([]);
@@ -204,7 +206,8 @@ export default function HomeScreen({ onNavigate }) {
         title="Overview"
         eyebrow="RIMT ACADEMIC TRUST"
         avatarUrl={currentStudent?.avatar_url || ImageAssets.defaultAvatar}
-        onNotificationPress={() => Alert.alert('Notifications', 'You have 1 new announcement from the Registrar.')}
+        unreadCount={unreadCount}
+        onNotificationPress={() => onNavigate?.('notifications')}
         onProfilePress={() => onNavigate?.('profile')}
       />
 
@@ -428,6 +431,25 @@ export default function HomeScreen({ onNavigate }) {
                 title="Internships"
                 subtitle="2 verified"
                 onPress={() => Alert.alert('Internships', '2 institutional internships verified by department.')}
+              />
+            </View>
+            <View style={[styles.actionRow, { marginTop: Spacing.spaceSm }]}>
+              <ActionTile
+                icon="fact-check"
+                iconColor={Colors.primary}
+                iconBgColor="rgba(163, 19, 33, 0.1)"
+                title="ATS Auditor"
+                subtitle="Forensic diagnostic"
+                onPress={() => onNavigate?.('resume-detector')}
+              />
+              <View style={{ width: Spacing.spaceSm }} />
+              <ActionTile
+                icon="verified"
+                iconColor="#2e7d4f"
+                iconBgColor="rgba(46, 125, 79, 0.1)"
+                title="Placement Hub"
+                subtitle="Campus drives"
+                onPress={() => onNavigate?.('placement')}
               />
             </View>
           </View>

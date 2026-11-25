@@ -18,8 +18,12 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import CredentialsScreen from './src/screens/CredentialsScreen';
 import PlacementScreen from './src/screens/PlacementScreen';
 import ResumeScreen from './src/screens/ResumeScreen';
+import ResumeDetectorScreen from './src/screens/ResumeDetectorScreen';
 
 import BottomNav from './src/components/BottomNav';
+import { NotificationProvider } from './src/context/NotificationContext';
+import NotificationBanner from './src/components/NotificationBanner';
+import NotificationScreen from './src/screens/NotificationScreen';
 
 function MainNavigator() {
   const { currentStudent, isLoading, setApprovedStudent, checkStatusForStudent, signOut } = useAuth();
@@ -85,7 +89,7 @@ function MainNavigator() {
       currentStudent &&
       (currentStudent.status === 'APPROVED' || currentStudent.status === 'VERIFIED');
 
-    const protectedScreens = ['home', 'placement', 'projects', 'profile', 'credentials', 'resume'];
+    const protectedScreens = ['home', 'placement', 'projects', 'profile', 'credentials', 'resume', 'resume-detector', 'notifications'];
 
     if (protectedScreens.includes(screenId)) {
       if (!isApproved) {
@@ -168,6 +172,10 @@ function MainNavigator() {
         return <CredentialsScreen onNavigate={handleNavigate} />;
       case 'resume':
         return <ResumeScreen onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
+      case 'resume-detector':
+        return <ResumeDetectorScreen onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
+      case 'notifications':
+        return <NotificationScreen onNavigate={handleNavigate} onBack={() => handleNavigate('home')} />;
       case 'home':
       default:
         return <HomeScreen onNavigate={handleNavigate} />;
@@ -178,6 +186,9 @@ function MainNavigator() {
     <SafeAreaView style={styles.safeArea}>
       <ExpoStatusBar style="dark" backgroundColor={Colors.surface} />
       <View style={styles.container}>
+
+        {/* Global Floating Header Notification Banner (In-App Live Alerts) */}
+        <NotificationBanner onNavigate={handleNavigate} />
 
         {/* Main Active Screen */}
         <View style={styles.screenWrapper}>
@@ -204,7 +215,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <MainNavigator />
+        <NotificationProvider>
+          <MainNavigator />
+        </NotificationProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

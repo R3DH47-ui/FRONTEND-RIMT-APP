@@ -9,9 +9,15 @@ export default function Header({
   eyebrow = 'RIMT ACADEMIC TRUST',
   onNotificationPress,
   onProfilePress,
-  hasUnreadNotifications = true,
+  hasUnreadNotifications,
+  unreadCount,
   avatarUrl = ImageAssets.defaultAvatar,
 }) {
+  const showUnread = unreadCount !== undefined ? unreadCount > 0 : (hasUnreadNotifications ?? true);
+  const badgeLabel = unreadCount !== undefined && unreadCount > 0
+    ? (unreadCount > 9 ? '9+' : String(unreadCount))
+    : '';
+
   return (
     <ZoomCard
       style={styles.container}
@@ -36,11 +42,17 @@ export default function Header({
           style={styles.iconButton}
           onPress={onNotificationPress}
           scaleTo={1.20}
-          accessibilityLabel="Notifications"
+          accessibilityLabel={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
           accessibilityRole="button"
         >
           <MaterialIcons name="notifications-none" size={24} color={Colors.secondary} />
-          {hasUnreadNotifications && <View style={styles.notificationDot} />}
+          {showUnread && (
+            <View style={[styles.notificationDot, badgeLabel ? styles.notificationCountBadge : null]}>
+              {Boolean(badgeLabel) && (
+                <Text style={styles.badgeText}>{badgeLabel}</Text>
+              )}
+            </View>
+          )}
         </ZoomCard>
 
         <ZoomCard
@@ -134,6 +146,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderWidth: 1.5,
     borderColor: '#ffffff',
+  },
+  notificationCountBadge: {
+    top: 5,
+    right: 5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 11,
+    textAlign: 'center',
   },
   avatarButton: {
     width: 36,

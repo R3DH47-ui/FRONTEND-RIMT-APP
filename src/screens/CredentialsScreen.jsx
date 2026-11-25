@@ -21,6 +21,7 @@ import { Colors, Spacing, Typography, Radii, ImageAssets } from '../theme/tokens
 import Header from '../components/Header';
 import ZoomCard from '../components/ZoomCard';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { getDocumentUri, viewOrOpenDocument } from '../utils/documentViewer';
 import {
   listStudentDocuments,
@@ -40,6 +41,7 @@ const CARD_WIDTH = (SCREEN_WIDTH - Spacing.margin * 2 - 12) / 2;
  */
 export default function CredentialsScreen({ onNavigate }) {
   const { currentStudent, updateProfile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [activeSegment, setActiveSegment] = useState('all');
   const [documents, setDocuments] = useState([]);
   const [internships, setInternships] = useState([]);
@@ -393,7 +395,8 @@ export default function CredentialsScreen({ onNavigate }) {
         title="Certificates"
         eyebrow="RIMT ACADEMIC TRUST"
         avatarUrl={currentStudent?.avatar_url || ImageAssets.profileAvatarSecondary}
-        onNotificationPress={() => Alert.alert('Certificates', 'All credentials verified.')}
+        unreadCount={unreadCount}
+        onNotificationPress={() => onNavigate?.('notifications')}
         onProfilePress={() => onNavigate?.('profile')}
       />
 
